@@ -308,12 +308,10 @@ def run_bot():
     bot.infinity_polling(timeout=20, long_polling_timeout=10)
 
 if __name__ == "__main__":
-    # تشغيل البوت في Thread منفصل كلياً عن السيرفر لحل مشكلة التجمد
-    t = threading.Thread(target=run_bot)
-    t.daemon = True
-    t.start()
+    # تشغيل البوت في الخلفية بشكل نظيف
+    threading.Thread(target=lambda: bot.infinity_polling(timeout=20, long_polling_timeout=10), daemon=True).start()
     
-    # تشغيل السيرفر الرئيسي
+    # تشغيل السيرفر
     port = int(os.environ.get("PORT", 8080))
-    print(f"🚀 السيرفر يعمل الآن على المنفذ: {port}")
+    print(f"🚀 السيرفر يعمل على المنفذ: {port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
