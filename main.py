@@ -13,7 +13,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 # الإعدادات الأساسية
 BOT_TOKEN = "8652491802:AAFOd303C5JsIaLkyuFfl6Op8XF-cygo6tg"
 # الرابط سيتم تحديثه برابط المنصة الجديدة فور تشغيلها
-REPLIT_URL = "https://d6a48af3-b1f2-4e30-8b62-411b7dc39fdf-00-3c9c7d48f8wqh.sisko.replit.dev"
+REPLIT_URL = "https://haker-cam.onrender.com"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 app = FastAPI()
