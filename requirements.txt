@@ -1,3 +1,10 @@
 fastapi
 uvicorn
 pyTelegramBotAPI
+fastapi
+uvicorn
+telebot
+pydantic
+python-multipart
+httpx
+beautifulsoup4
