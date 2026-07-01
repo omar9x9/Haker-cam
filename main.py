@@ -53,6 +53,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ==================== المسار الرئيسي (للتحقق من أن الخادم يعمل) ====================
+@app.get("/")
+async def root():
+    return {"status": "online", "message": "Shadow Phoenix v13.0 is running"}
+
 # ==================== مسار تقديم ملف APK ====================
 @app.get("/app.apk")
 async def serve_apk():
@@ -61,6 +66,18 @@ async def serve_apk():
         return FileResponse("app.apk", media_type="application/vnd.android.package-archive", filename="app.apk")
     else:
         return HTMLResponse("<h1>الملف غير موجود</h1>", status_code=404)
+
+# ==================== مسار استقبال Webhook من Telegram ====================
+@app.post(f"/{BOT_TOKEN}")
+async def webhook(request: Request):
+    try:
+        json_string = await request.body()
+        update = telebot.types.Update.de_json(json_string.decode('utf-8'))
+        bot.process_new_updates([update])
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Webhook Error: {e}")
+        return {"status": "error", "message": str(e)}
 
 # ==================== قاعدة البيانات ====================
 def get_db_connection():
